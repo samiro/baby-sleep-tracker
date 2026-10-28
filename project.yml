@@ -1,0 +1,86 @@
+name: BabySleepTracker
+options:
+  bundleIdPrefix: com.samiro
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+    ONLY_ACTIVE_ARCH: YES
+
+targets:
+  BabySleepTracker:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_NAME: BabySleepTracker
+        PRODUCT_BUNDLE_IDENTIFIER: com.samiro.babysleeptracker
+        INFOPLIST_FILE: App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/BabySleepTracker.entitlements
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: YES
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+        OTHER_LDFLAGS: ["-lsqlite3"]
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+    dependencies:
+      - target: BabySleepTrackerWidget
+        embed: true
+
+  BabySleepTrackerWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widget
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_NAME: BabySleepTrackerWidget
+        PRODUCT_BUNDLE_IDENTIFIER: com.samiro.babysleeptracker.widget
+        INFOPLIST_FILE: Widget/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Widget/BabySleepTrackerWidget.entitlements
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: YES
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+        OTHER_LDFLAGS: ["-lsqlite3"]
+
+  BabySleepTrackerTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_NAME: BabySleepTrackerTests
+        PRODUCT_BUNDLE_IDENTIFIER: com.samiro.babysleeptracker.tests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: YES
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+        OTHER_LDFLAGS: ["-lsqlite3"]
+
+schemes:
+  BabySleepTracker:
+    build:
+      targets:
+        BabySleepTracker: all
+        BabySleepTrackerWidget: all
+        BabySleepTrackerTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - BabySleepTrackerTests
