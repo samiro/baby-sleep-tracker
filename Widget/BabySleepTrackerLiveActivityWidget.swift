@@ -36,13 +36,18 @@ public struct BabySleepTrackerLiveActivityWidget: Widget {
                 Image(systemName: "moon.fill")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(.indigo)
+                    .frame(width: 14, height: 14)
             } compactTrailing: {
                 // MARK: - Notch Right Wing: Compact Elapsed Timer
-                // Kept strictly minimal so status bar battery (carga) is NEVER obscured
+                // Frame width constraint is MANDATORY to prevent SwiftUI Text(style: .timer)
+                // from requesting infinite width and forcing iOS SpringBoard to stretch the island
+                // and hide the status bar clock and battery.
                 Text(context.state.startDate, style: .timer)
                     .monospacedDigit()
                     .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .minimumScaleFactor(0.8)
                     .foregroundColor(.indigo)
+                    .frame(width: 48, alignment: .trailing)
             } minimal: {
                 // MARK: - Minimal Presentation
                 Image(systemName: "moon.fill")
