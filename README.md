@@ -6,6 +6,18 @@ Minimalist, reliable native iOS app and interactive Home Screen widget for track
 
 ## Features
 
+- **Dynamic Island / Notch Live Activity ("Integración con el Notch")**:
+  - **Exclusivo para sueño**: Solo se activa mientras Emanuel está **durmiendo** (🌙). Al despertar (☀️), el Notch se desactiva inmediatamente.
+  - Presentación compacta en el Notch:
+    - **Izquierda (compactLeading)**: Ícono de sueño (🌙 `moon.stars.fill` en índigo).
+    - **Derecha (compactTrailing)**: Cronómetro en tiempo real con el tiempo transcurrido de sueño (time lapsed) con dígitos monoespaciados.
+  - Vista expandida (al mantener pulsado el Notch):
+    - Visualización del estado ("Durmiendo"), nombre de Emanuel, hora de inicio ("Desde las HH:mm"), y cronómetro transcurrido en vivo.
+    - Botón de acción directa con App Intents: registrar **"Despertó"** para cerrar el intervalo y desactivar el Notch.
+  - Pantalla de Bloqueo (Lock Screen Banner):
+    - Banner interactivo de alta legibilidad para la noche con botón "Despertó" y cronómetro en vivo.
+  - Sincronización automática en segundo plano mediante `LiveActivityManager` al registrar eventos desde la app, widget o Dynamic Island.
+
 - **Interactive Medium Widget ("Emanuel · Sueño")**:
   - Live state indicator (🌙 Durmiendo / ☀️ Despierto) with distinctive color accents.
   - Live elapsed time counter updating via native WidgetKit system timers without background battery drain.
@@ -56,7 +68,8 @@ baby-sleep-tracker/
 │   ├── Info.plist                      # URL scheme (emanuelsleep://) configuration
 │   └── BabySleepTracker.entitlements   # App Group entitlement
 ├── Widget/
-│   ├── BabySleepTrackerWidget.swift    # WidgetKit entrypoint and TimelineProvider
+│   ├── BabySleepTrackerWidget.swift    # WidgetKit bundle & Medium widget provider
+│   ├── BabySleepTrackerLiveActivityWidget.swift # Dynamic Island & Notch Live Activity
 │   ├── WidgetViews.swift               # Medium widget view with interactive buttons
 │   ├── Info.plist                      # Widget extension configuration
 │   └── BabySleepTrackerWidget.entitlements # Widget App Group entitlement
@@ -66,17 +79,20 @@ baby-sleep-tracker/
 │   │   ├── EventType.swift             # sleep, wake, bedtimeRoutineStart, sleepAttempt
 │   │   ├── SleepClassification.swift   # nap, nightSleep, unspecified
 │   │   ├── SleepInterval.swift         # Paired sleep & awake intervals
-│   │   └── DayMetrics.swift            # 24h metrics calculations
+│   │   ├── DayMetrics.swift            # 24h metrics calculations
+│   │   └── SleepActivityAttributes.swift # ActivityKit attributes & content state
 │   ├── Storage/
 │   │   ├── SQLiteDatabase.swift        # WAL-mode multi-process SQLite engine
 │   │   ├── DatabaseError.swift         # Localized database errors
 │   │   └── AppGroupCoordinator.swift   # App Group container resolver
 │   ├── Services/
 │   │   ├── SleepTrackingService.swift  # Business logic, state transitions, validation
+│   │   ├── LiveActivityManager.swift   # Notch / Dynamic Island activity lifecycle
 │   │   └── ExportService.swift         # CSV and JSON serialisation
 │   └── Intents/
 │       └── SleepAppIntents.swift       # WidgetKit App Intents
 ├── Tests/
+│   ├── LiveActivityTests.swift         # Dynamic Island / Notch Live Activity tests
 │   ├── SleepIntervalTests.swift        # Durations, wake windows, active intervals
 │   ├── OvernightBoundaryTests.swift    # Intervals crossing midnight (20:30 -> 06:30)
 │   ├── DuplicateHandlingTests.swift    # Duplicate taps, 5s debounce, safe errors
