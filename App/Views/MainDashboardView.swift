@@ -35,42 +35,6 @@ public struct MainDashboardView: View {
                     }
                     .padding(.top, 12)
 
-                    // Notch / Dynamic Island Status Indicator
-                    HStack {
-                        HStack(spacing: 6) {
-                            Image(systemName: "iphone.gen3")
-                                .font(.system(size: 13))
-                                .foregroundColor(.secondary)
-                            Text("Notch / Dynamic Island")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(.secondary)
-                        }
-
-                        Spacer()
-
-                        HStack(spacing: 5) {
-                            Circle()
-                                .fill(isSleeping ? Color.indigo : Color.secondary.opacity(0.6))
-                                .frame(width: 6, height: 6)
-                            Text(isSleeping ? "Activo en el Notch" : "Inactivo (solo durmiendo)")
-                                .font(.system(size: 11, weight: isSleeping ? .bold : .medium))
-                                .foregroundColor(isSleeping ? .indigo : .secondary)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(isSleeping ? Color.indigo.opacity(0.12) : Color.secondary.opacity(0.08))
-                        .clipShape(Capsule())
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .onTapGesture {
-                        Task {
-                            await LiveActivityManager.shared.syncWithCurrentState()
-                        }
-                    }
-
                     // Big Current State Card with Live Timer
                     VStack(spacing: 16) {
                         ZStack {
