@@ -2,6 +2,9 @@ import Foundation
 #if canImport(WidgetKit)
 import WidgetKit
 #endif
+#if canImport(ActivityKit)
+import ActivityKit
+#endif
 
 public extension Notification.Name {
     static let sleepEventsDidChange = Notification.Name("com.samiro.babysleeptracker.eventsChanged")
@@ -148,6 +151,11 @@ public final class SleepTrackingService: @unchecked Sendable {
     public func notifyDataChanged() {
         #if canImport(WidgetKit)
         WidgetCenter.shared.reloadAllTimelines()
+        #endif
+        #if canImport(ActivityKit)
+        Task {
+            await LiveActivityManager.shared.syncWithCurrentState()
+        }
         #endif
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: .sleepEventsDidChange, object: nil)

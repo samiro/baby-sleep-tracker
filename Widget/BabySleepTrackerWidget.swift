@@ -63,6 +63,15 @@ public struct SleepTimelineProvider: TimelineProvider {
 }
 
 @main
+public struct BabySleepTrackerWidgetBundle: WidgetBundle {
+    public init() {}
+
+    public var body: some Widget {
+        BabySleepTrackerWidget()
+        BabySleepTrackerLiveActivityWidget()
+    }
+}
+
 public struct BabySleepTrackerWidget: Widget {
     public let kind: String = "EmanuelSleepWidget"
 

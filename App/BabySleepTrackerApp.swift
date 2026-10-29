@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct BabySleepTrackerApp: App {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: String = "dashboard"
 
     var body: some Scene {
@@ -21,6 +22,16 @@ struct BabySleepTrackerApp: App {
             }
             .onOpenURL { url in
                 handleDeepLink(url)
+            }
+            .task {
+                await LiveActivityManager.shared.syncWithCurrentState()
+            }
+            .onChange(of: scenePhase) { oldPhase, newPhase in
+                if newPhase == .active {
+                    Task {
+                        await LiveActivityManager.shared.syncWithCurrentState()
+                    }
+                }
             }
         }
     }
