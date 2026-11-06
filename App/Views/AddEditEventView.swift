@@ -24,10 +24,31 @@ public struct AddEditEventView: View {
         self.onSave = onSave
         self.onDelete = onDelete
 
-        _eventType = State(initialValue: existingEvent?.type ?? .sleep)
+        let initialType: EventType
+        if let type = existingEvent?.type, type != .sleepAttempt {
+            initialType = type
+        } else {
+            initialType = .sleep
+        }
+        _eventType = State(initialValue: initialType)
         _timestamp = State(initialValue: existingEvent?.timestamp ?? initialDate)
-        _classification = State(initialValue: existingEvent?.classification ?? .unspecified)
+
+        let initialClassification: SleepClassification
+        if let classification = existingEvent?.classification, classification != .unspecified {
+            initialClassification = classification
+        } else {
+            initialClassification = .nap
+        }
+        _classification = State(initialValue: initialClassification)
         _notes = State(initialValue: existingEvent?.notes ?? "")
+    }
+
+    private var availableEventTypes: [EventType] {
+        EventType.allCases.filter { $0 != .sleepAttempt }
+    }
+
+    private var availableClassifications: [SleepClassification] {
+        SleepClassification.allCases.filter { $0 != .unspecified }
     }
 
     public var body: some View {
@@ -43,7 +64,7 @@ public struct AddEditEventView: View {
 
                 Section(header: Text("Tipo de evento")) {
                     Picker("Tipo", selection: $eventType) {
-                        ForEach(EventType.allCases, id: \.self) { type in
+                        ForEach(availableEventTypes, id: \.self) { type in
                             Label(type.displayName, systemImage: type.iconName).tag(type)
                         }
                     }
@@ -62,7 +83,7 @@ public struct AddEditEventView: View {
                 if eventType == .sleep {
                     Section(header: Text("Clasificación del sueño")) {
                         Picker("Clasificación", selection: $classification) {
-                            ForEach(SleepClassification.allCases, id: \.self) { item in
+                            ForEach(availableClassifications, id: \.self) { item in
                                 Label(item.displayName, systemImage: item.iconName).tag(item)
                             }
                         }

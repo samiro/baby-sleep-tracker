@@ -29,8 +29,8 @@ public struct TimelineHistoryView: View {
 
     public var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
+            List {
+                Group {
                     // Date Navigation Bar
                     dateNavigationBar
 
@@ -41,13 +41,56 @@ public struct TimelineHistoryView: View {
 
                     // Sleep Intervals Section
                     intervalsSection
-
-                    // Raw Events Timeline Section
-                    rawEventsSection
                 }
-                .padding(.horizontal)
-                .padding(.bottom, 32)
+                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+
+                // Raw Events Timeline Section
+                Section {
+                    if events.isEmpty {
+                        Text("Sin eventos en este día.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding()
+                            .background(Color(.secondarySystemBackground).opacity(0.5))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                    } else {
+                        ForEach(events) { event in
+                            Button {
+                                editingEvent = event
+                            } label: {
+                                eventRow(for: event)
+                            }
+                            .buttonStyle(.plain)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    eventToDelete = event
+                                    showDeleteConfirmation = true
+                                } label: {
+                                    Label("Eliminar", systemImage: "trash")
+                                }
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Registro de eventos")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                        .textCase(nil)
+                }
+                .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 4, trailing: 16))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
             }
+            .listStyle(.plain)
             .navigationTitle("Historial")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -231,85 +274,47 @@ public struct TimelineHistoryView: View {
         }
     }
 
-    private var rawEventsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Registro de eventos")
-                .font(.headline)
+    private func eventRow(for event: SleepEvent) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: event.type.iconName)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(colorForEvent(event.type))
+                .frame(width: 32, height: 32)
+                .background(colorForEvent(event.type).opacity(0.15))
+                .clipShape(Circle())
 
-            if events.isEmpty {
-                Text("Sin eventos en este día.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding()
-                    .background(Color(.secondarySystemBackground).opacity(0.5))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            } else {
-                VStack(spacing: 8) {
-                    ForEach(events) { event in
-                        HStack(spacing: 12) {
-                            Image(systemName: event.type.iconName)
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(colorForEvent(event.type))
-                                .frame(width: 32, height: 32)
-                                .background(colorForEvent(event.type).opacity(0.15))
-                                .clipShape(Circle())
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack {
-                                    Text(event.type.displayName)
-                                        .font(.subheadline)
-                                        .fontWeight(.semibold)
-                                    if event.type == .sleep {
-                                        Text("(\(event.classification.displayName))")
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-
-                                if let notes = event.notes, !notes.isEmpty {
-                                    Text(notes)
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(2)
-                                }
-                            }
-
-                            Spacer()
-
-                            Text(timeFormatter.string(from: event.timestamp))
-                                .font(.subheadline)
-                                .monospacedDigit()
-                                .fontWeight(.medium)
-
-                            Menu {
-                                Button {
-                                    editingEvent = event
-                                } label: {
-                                    Label("Editar", systemImage: "pencil")
-                                }
-
-                                Button(role: .destructive) {
-                                    eventToDelete = event
-                                    showDeleteConfirmation = true
-                                } label: {
-                                    Label("Eliminar", systemImage: "trash")
-                                }
-                            } label: {
-                                Image(systemName: "ellipsis")
-                                    .padding(.vertical, 8)
-                                    .padding(.horizontal, 4)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(Color(.secondarySystemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Text(event.type.displayName)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    if event.type == .sleep {
+                        Text("(\(event.classification.displayName))")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
                 }
+
+                if let notes = event.notes, !notes.isEmpty {
+                    Text(notes)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
             }
+
+            Spacer()
+
+            Text(timeFormatter.string(from: event.timestamp))
+                .font(.subheadline)
+                .monospacedDigit()
+                .fontWeight(.medium)
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     // MARK: - Actions

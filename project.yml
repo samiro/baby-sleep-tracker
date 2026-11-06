@@ -26,8 +26,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.samiro.babysleeptracker
         INFOPLIST_FILE: App/Info.plist
         CODE_SIGN_ENTITLEMENTS: App/BabySleepTracker.entitlements
-        CODE_SIGN_IDENTITY: "-"
-        CODE_SIGNING_REQUIRED: NO
+        DEVELOPMENT_TEAM: 494H4HP6ZA
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "Apple Development"
+        CODE_SIGNING_REQUIRED: YES
         CODE_SIGNING_ALLOWED: YES
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
         OTHER_LDFLAGS: ["-lsqlite3"]
@@ -48,8 +50,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.samiro.babysleeptracker.widget
         INFOPLIST_FILE: Widget/Info.plist
         CODE_SIGN_ENTITLEMENTS: Widget/BabySleepTrackerWidget.entitlements
-        CODE_SIGN_IDENTITY: "-"
-        CODE_SIGNING_REQUIRED: NO
+        DEVELOPMENT_TEAM: 494H4HP6ZA
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "Apple Development"
+        CODE_SIGNING_REQUIRED: YES
         CODE_SIGNING_ALLOWED: YES
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
         OTHER_LDFLAGS: ["-lsqlite3"]
