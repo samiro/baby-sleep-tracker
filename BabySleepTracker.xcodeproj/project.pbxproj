@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0241B3A5855A3C3E1E0C9776 /* SleepTrackingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DCC1449EEBF2F1C09CA5DFD /* SleepTrackingService.swift */; };
+		043B0F7C98855E3163741CFD /* EventEditingAndDeletionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9935520227E419FAB66C6BC /* EventEditingAndDeletionTests.swift */; };
 		0714B58288B7FDAAFA30ECA7 /* TimezoneHandlingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BC9CB04011DF05EA6E77776 /* TimezoneHandlingTests.swift */; };
 		0E73621F45E5FEAFF7AB2232 /* SleepEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09EAC2966E8362D7405B1EAC /* SleepEvent.swift */; };
 		145B0857763E79F18233C5DB /* SQLiteDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F4B9844DF79DB42CE36DED2 /* SQLiteDatabase.swift */; };
@@ -116,6 +117,7 @@
 		95B8451B5860BB634F3EA029 /* BabySleepTrackerWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BabySleepTrackerWidget.swift; sourceTree = "<group>"; };
 		9EEB4F12B1F231392974CC9D /* SleepAppIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepAppIntents.swift; sourceTree = "<group>"; };
 		A8D8563B8BE0970EE2B1AAC0 /* SleepActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepActivityAttributes.swift; sourceTree = "<group>"; };
+		B9935520227E419FAB66C6BC /* EventEditingAndDeletionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventEditingAndDeletionTests.swift; sourceTree = "<group>"; };
 		C00A82E5DEF25F412A3CCD79 /* SleepIntervalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepIntervalTests.swift; sourceTree = "<group>"; };
 		CF73618F247186A8399A7817 /* DuplicateHandlingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuplicateHandlingTests.swift; sourceTree = "<group>"; };
 		E22F39156A52DFEDED577FEE /* BabySleepTrackerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BabySleepTrackerApp.swift; sourceTree = "<group>"; };
@@ -174,6 +176,7 @@
 			children = (
 				929E3515DCC1019CE0FEB014 /* ConcurrencyAndPersistenceTests.swift */,
 				CF73618F247186A8399A7817 /* DuplicateHandlingTests.swift */,
+				B9935520227E419FAB66C6BC /* EventEditingAndDeletionTests.swift */,
 				69DCF1F69DB6A8D269354A2C /* ExportTests.swift */,
 				276259D29817BF8DA7BC9735 /* LiveActivityTests.swift */,
 				902707140BD9A18D0EB30A36 /* OvernightBoundaryTests.swift */,
@@ -311,7 +314,15 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 2710;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					E0AF3CEEF940BB9EF3DAA030 = {
+						ProvisioningStyle = Automatic;
+					};
+					EB2F7BA6C856CB7BC55B36AD = {
+						ProvisioningStyle = Automatic;
+					};
+				};
 			};
 			buildConfigurationList = 2B65C4B3D4CB2B147A043FAE /* Build configuration list for PBXProject "BabySleepTracker" */;
 			developmentRegion = en;
@@ -344,6 +355,7 @@
 				9CE8AA3C756797747EE4F0F8 /* DatabaseError.swift in Sources */,
 				736A01479A63D8D24E9F23FB /* DayMetrics.swift in Sources */,
 				1CAE78EBEFD127D1D02F3ADC /* DuplicateHandlingTests.swift in Sources */,
+				043B0F7C98855E3163741CFD /* EventEditingAndDeletionTests.swift in Sources */,
 				6C4B25C38409A290F3D25DD0 /* EventType.swift in Sources */,
 				2FD38E2FF0234CF97DEB4E70 /* ExportService.swift in Sources */,
 				1DAEA2BF4DF599DAF5BCA052 /* ExportTests.swift in Sources */,
@@ -426,7 +438,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "";
 				CODE_SIGNING_ALLOWED = YES;
-				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGNING_REQUIRED = YES;
 				CODE_SIGN_ENTITLEMENTS = App/BabySleepTracker.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -439,7 +451,6 @@
 				OTHER_LDFLAGS = "-lsqlite3";
 				PRODUCT_BUNDLE_IDENTIFIER = com.samiro.babysleeptracker;
 				PRODUCT_NAME = BabySleepTracker;
-				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -498,7 +509,6 @@
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
@@ -510,7 +520,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGNING_ALLOWED = YES;
-				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGNING_REQUIRED = YES;
 				CODE_SIGN_ENTITLEMENTS = Widget/BabySleepTrackerWidget.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -524,7 +534,6 @@
 				OTHER_LDFLAGS = "-lsqlite3";
 				PRODUCT_BUNDLE_IDENTIFIER = com.samiro.babysleeptracker.widget;
 				PRODUCT_NAME = BabySleepTrackerWidget;
-				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -535,7 +544,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGNING_ALLOWED = YES;
-				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGNING_REQUIRED = YES;
 				CODE_SIGN_ENTITLEMENTS = Widget/BabySleepTrackerWidget.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -549,7 +558,6 @@
 				OTHER_LDFLAGS = "-lsqlite3";
 				PRODUCT_BUNDLE_IDENTIFIER = com.samiro.babysleeptracker.widget;
 				PRODUCT_NAME = BabySleepTrackerWidget;
-				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -562,7 +570,9 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGNING_ALLOWED = YES;
 				CODE_SIGNING_REQUIRED = NO;
-				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = Q6ZF97725U;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -572,6 +582,7 @@
 				OTHER_LDFLAGS = "-lsqlite3";
 				PRODUCT_BUNDLE_IDENTIFIER = com.samiro.babysleeptracker.tests;
 				PRODUCT_NAME = BabySleepTrackerTests;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -636,7 +647,6 @@
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -649,7 +659,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "";
 				CODE_SIGNING_ALLOWED = YES;
-				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGNING_REQUIRED = YES;
 				CODE_SIGN_ENTITLEMENTS = App/BabySleepTracker.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -662,7 +672,6 @@
 				OTHER_LDFLAGS = "-lsqlite3";
 				PRODUCT_BUNDLE_IDENTIFIER = com.samiro.babysleeptracker;
 				PRODUCT_NAME = BabySleepTracker;
-				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -675,7 +684,9 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGNING_ALLOWED = YES;
 				CODE_SIGNING_REQUIRED = NO;
-				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = Q6ZF97725U;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -685,6 +696,7 @@
 				OTHER_LDFLAGS = "-lsqlite3";
 				PRODUCT_BUNDLE_IDENTIFIER = com.samiro.babysleeptracker.tests;
 				PRODUCT_NAME = BabySleepTrackerTests;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				TARGETED_DEVICE_FAMILY = "1,2";

@@ -1,5 +1,4 @@
 import XCTest
-@testable import BabySleepTracker
 
 final class LiveActivityTests: XCTestCase {
     private var tempDir: URL!
