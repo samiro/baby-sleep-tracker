@@ -173,6 +173,9 @@ public struct TimelineHistoryView: View {
             .onReceive(NotificationCenter.default.publisher(for: .sleepEventsDidChange)) { _ in
                 reloadData()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .sleepConfigurationDidChange)) { _ in
+                reloadData()
+            }
         }
     }
 

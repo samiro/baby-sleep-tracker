@@ -15,8 +15,11 @@
 		176DBA0AC769F0E57ADF63BE /* SleepInterval.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3150F095ECB913AB32762D93 /* SleepInterval.swift */; };
 		1CAE78EBEFD127D1D02F3ADC /* DuplicateHandlingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF73618F247186A8399A7817 /* DuplicateHandlingTests.swift */; };
 		1DAEA2BF4DF599DAF5BCA052 /* ExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69DCF1F69DB6A8D269354A2C /* ExportTests.swift */; };
+		1F383A13360348B46CAE9D49 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A28E4028D8F2A675F454F535 /* SettingsView.swift */; };
 		23B6BEBCA25873161D99F2E8 /* SleepClassification.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D593A441E4432758CBAC3C4 /* SleepClassification.swift */; };
+		251B32A39E8425E6D8313338 /* SleepScheduleConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFA5A5FEDC05881E1123BE9E /* SleepScheduleConfigurationTests.swift */; };
 		2547FCB0D603F253579699B9 /* SleepIntervalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00A82E5DEF25F412A3CCD79 /* SleepIntervalTests.swift */; };
+		2716DE66D3E53AE954BD461B /* SleepScheduleConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8F25E39C787C1462760EE40 /* SleepScheduleConfiguration.swift */; };
 		271E6382F994311945FE1682 /* ExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 370806AE8A51272386D7BE58 /* ExportService.swift */; };
 		27BDEADC2BCBF7C6E4E4F244 /* DayMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EA64BD2B9329998ECA76500 /* DayMetrics.swift */; };
 		2A89DE0577B8C9D4F9691B8A /* DatabaseError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48E3EFCB5C63C4A9113C49EF /* DatabaseError.swift */; };
@@ -28,6 +31,8 @@
 		396528C8AC542DCD11F8273A /* BabySleepTrackerWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95B8451B5860BB634F3EA029 /* BabySleepTrackerWidget.swift */; };
 		3C7805FC2CBFA0B60BA3920F /* TimelineHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0490462B5CDD90FB72A1FE9 /* TimelineHistoryView.swift */; };
 		3DB7E3E175FAA30040C0CB4B /* DatabaseError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48E3EFCB5C63C4A9113C49EF /* DatabaseError.swift */; };
+		3FA75CAA3D2C692117A6D84D /* SleepScheduleConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8F25E39C787C1462760EE40 /* SleepScheduleConfiguration.swift */; };
+		461FB7CDC23D99EEEE8E848B /* SleepConfigurationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C82D7228747F41E731447D86 /* SleepConfigurationManager.swift */; };
 		4B4E9B9D7E201840E3EE3A84 /* ExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 370806AE8A51272386D7BE58 /* ExportService.swift */; };
 		50ADD28FB1756869083E2D2A /* SQLiteDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F4B9844DF79DB42CE36DED2 /* SQLiteDatabase.swift */; };
 		59D63D3246F2AEC076F3547F /* SleepInterval.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3150F095ECB913AB32762D93 /* SleepInterval.swift */; };
@@ -36,6 +41,7 @@
 		66E4D89D8B5280673C148400 /* AppGroupCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62E9AD32FA3F5BA5B8A4FEA1 /* AppGroupCoordinator.swift */; };
 		68CD3B81C173F632E2D4D2F8 /* SleepAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EEB4F12B1F231392974CC9D /* SleepAppIntents.swift */; };
 		6C4B25C38409A290F3D25DD0 /* EventType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 031A51BA646977A5DF9D4F1F /* EventType.swift */; };
+		6C92F4E64F5F7F7F4D323352 /* SleepConfigurationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C82D7228747F41E731447D86 /* SleepConfigurationManager.swift */; };
 		736A01479A63D8D24E9F23FB /* DayMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EA64BD2B9329998ECA76500 /* DayMetrics.swift */; };
 		764EF44F3B4F21AFC79E035F /* SleepEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09EAC2966E8362D7405B1EAC /* SleepEvent.swift */; };
 		7A5A81ACF1AA978940B489C5 /* EventType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 031A51BA646977A5DF9D4F1F /* EventType.swift */; };
@@ -44,6 +50,7 @@
 		88F6606BA9C017C6B8339392 /* BabySleepTrackerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E22F39156A52DFEDED577FEE /* BabySleepTrackerApp.swift */; };
 		943F0B3B1C793BE2DD10E80B /* WidgetViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A613935590B91437673A88D /* WidgetViews.swift */; };
 		9CE8AA3C756797747EE4F0F8 /* DatabaseError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48E3EFCB5C63C4A9113C49EF /* DatabaseError.swift */; };
+		A4B3D77A9606A7DC7371CF0B /* SleepConfigurationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C82D7228747F41E731447D86 /* SleepConfigurationManager.swift */; };
 		A5B681BC7474177E1524DC45 /* LiveActivityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 276259D29817BF8DA7BC9735 /* LiveActivityTests.swift */; };
 		A7828872CC512CB04C92F5B0 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E54C885BB15BAF4FD13DB34 /* LiveActivityManager.swift */; };
 		AA1328ADB5523A21B83B62CC /* SleepClassification.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D593A441E4432758CBAC3C4 /* SleepClassification.swift */; };
@@ -54,6 +61,7 @@
 		C67ECD0F8F892984DA052159 /* BabySleepTrackerLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6050526827B09BC53973128E /* BabySleepTrackerLiveActivityWidget.swift */; };
 		C8B9693DBE74F5A3B08DD124 /* SleepTrackingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DCC1449EEBF2F1C09CA5DFD /* SleepTrackingService.swift */; };
 		CE11BF3C0D7F498C395A4FF0 /* SleepClassification.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D593A441E4432758CBAC3C4 /* SleepClassification.swift */; };
+		CF5B31D830DC738CCAEB585A /* SleepScheduleConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8F25E39C787C1462760EE40 /* SleepScheduleConfiguration.swift */; };
 		D392A28E813DE5748B1F04C1 /* SleepAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EEB4F12B1F231392974CC9D /* SleepAppIntents.swift */; };
 		E044B52BAE45AAB4CE04593B /* AddEditEventView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF1635E75160E580FD38C920 /* AddEditEventView.swift */; };
 		E2E3D40E9294B45A1691236F /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E54C885BB15BAF4FD13DB34 /* LiveActivityManager.swift */; };
@@ -105,9 +113,9 @@
 		62E9AD32FA3F5BA5B8A4FEA1 /* AppGroupCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppGroupCoordinator.swift; sourceTree = "<group>"; };
 		69DCF1F69DB6A8D269354A2C /* ExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportTests.swift; sourceTree = "<group>"; };
 		6D593A441E4432758CBAC3C4 /* SleepClassification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepClassification.swift; sourceTree = "<group>"; };
-		6F30005909ED1FC93533C81F /* BabySleepTrackerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BabySleepTrackerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		6F30005909ED1FC93533C81F /* BabySleepTrackerTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BabySleepTrackerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6F4B9844DF79DB42CE36DED2 /* SQLiteDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLiteDatabase.swift; sourceTree = "<group>"; };
-		7413547AA1F75DB2345D2382 /* BabySleepTrackerWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BabySleepTrackerWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		7413547AA1F75DB2345D2382 /* BabySleepTrackerWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = BabySleepTrackerWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		8739C7B7F357AA478FF487D0 /* DailyMetricsCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyMetricsCardView.swift; sourceTree = "<group>"; };
 		8A0B88F2822C8D3459E0FA29 /* MainDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainDashboardView.swift; sourceTree = "<group>"; };
 		8ACE9B3707E578975ACBC385 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -116,13 +124,17 @@
 		92FB5CDFE154B436705FC3BD /* BabySleepTracker.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BabySleepTracker.entitlements; sourceTree = "<group>"; };
 		95B8451B5860BB634F3EA029 /* BabySleepTrackerWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BabySleepTrackerWidget.swift; sourceTree = "<group>"; };
 		9EEB4F12B1F231392974CC9D /* SleepAppIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepAppIntents.swift; sourceTree = "<group>"; };
+		A28E4028D8F2A675F454F535 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A8D8563B8BE0970EE2B1AAC0 /* SleepActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepActivityAttributes.swift; sourceTree = "<group>"; };
 		B9935520227E419FAB66C6BC /* EventEditingAndDeletionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventEditingAndDeletionTests.swift; sourceTree = "<group>"; };
+		BFA5A5FEDC05881E1123BE9E /* SleepScheduleConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepScheduleConfigurationTests.swift; sourceTree = "<group>"; };
 		C00A82E5DEF25F412A3CCD79 /* SleepIntervalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepIntervalTests.swift; sourceTree = "<group>"; };
+		C82D7228747F41E731447D86 /* SleepConfigurationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepConfigurationManager.swift; sourceTree = "<group>"; };
 		CF73618F247186A8399A7817 /* DuplicateHandlingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuplicateHandlingTests.swift; sourceTree = "<group>"; };
 		E22F39156A52DFEDED577FEE /* BabySleepTrackerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BabySleepTrackerApp.swift; sourceTree = "<group>"; };
-		E79DC806AA3E43C571753FF1 /* BabySleepTracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BabySleepTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E79DC806AA3E43C571753FF1 /* BabySleepTracker.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BabySleepTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E809164EF386B0CA707302C4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		E8F25E39C787C1462760EE40 /* SleepScheduleConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepScheduleConfiguration.swift; sourceTree = "<group>"; };
 		EF1635E75160E580FD38C920 /* AddEditEventView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddEditEventView.swift; sourceTree = "<group>"; };
 		F0490462B5CDD90FB72A1FE9 /* TimelineHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineHistoryView.swift; sourceTree = "<group>"; };
 		F44A72794EDC844966B7CAD5 /* BabySleepTrackerWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BabySleepTrackerWidget.entitlements; sourceTree = "<group>"; };
@@ -181,6 +193,7 @@
 				276259D29817BF8DA7BC9735 /* LiveActivityTests.swift */,
 				902707140BD9A18D0EB30A36 /* OvernightBoundaryTests.swift */,
 				C00A82E5DEF25F412A3CCD79 /* SleepIntervalTests.swift */,
+				BFA5A5FEDC05881E1123BE9E /* SleepScheduleConfigurationTests.swift */,
 				3BC9CB04011DF05EA6E77776 /* TimezoneHandlingTests.swift */,
 			);
 			path = Tests;
@@ -201,6 +214,7 @@
 			children = (
 				370806AE8A51272386D7BE58 /* ExportService.swift */,
 				4E54C885BB15BAF4FD13DB34 /* LiveActivityManager.swift */,
+				C82D7228747F41E731447D86 /* SleepConfigurationManager.swift */,
 				3DCC1449EEBF2F1C09CA5DFD /* SleepTrackingService.swift */,
 			);
 			path = Services;
@@ -225,6 +239,7 @@
 				6D593A441E4432758CBAC3C4 /* SleepClassification.swift */,
 				09EAC2966E8362D7405B1EAC /* SleepEvent.swift */,
 				3150F095ECB913AB32762D93 /* SleepInterval.swift */,
+				E8F25E39C787C1462760EE40 /* SleepScheduleConfiguration.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -235,6 +250,7 @@
 				EF1635E75160E580FD38C920 /* AddEditEventView.swift */,
 				8739C7B7F357AA478FF487D0 /* DailyMetricsCardView.swift */,
 				8A0B88F2822C8D3459E0FA29 /* MainDashboardView.swift */,
+				A28E4028D8F2A675F454F535 /* SettingsView.swift */,
 				F0490462B5CDD90FB72A1FE9 /* TimelineHistoryView.swift */,
 			);
 			path = Views;
@@ -317,9 +333,11 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					E0AF3CEEF940BB9EF3DAA030 = {
+						DevelopmentTeam = 494H4HP6ZA;
 						ProvisioningStyle = Automatic;
 					};
 					EB2F7BA6C856CB7BC55B36AD = {
+						DevelopmentTeam = 494H4HP6ZA;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -366,9 +384,12 @@
 				E327A1B456A02583F8107557 /* SleepActivityAttributes.swift in Sources */,
 				62AD74EADCA8415356160C6C /* SleepAppIntents.swift in Sources */,
 				23B6BEBCA25873161D99F2E8 /* SleepClassification.swift in Sources */,
+				461FB7CDC23D99EEEE8E848B /* SleepConfigurationManager.swift in Sources */,
 				80A33AE8522FE9FD25645ABE /* SleepEvent.swift in Sources */,
 				59D63D3246F2AEC076F3547F /* SleepInterval.swift in Sources */,
 				2547FCB0D603F253579699B9 /* SleepIntervalTests.swift in Sources */,
+				3FA75CAA3D2C692117A6D84D /* SleepScheduleConfiguration.swift in Sources */,
+				251B32A39E8425E6D8313338 /* SleepScheduleConfigurationTests.swift in Sources */,
 				0241B3A5855A3C3E1E0C9776 /* SleepTrackingService.swift in Sources */,
 				0714B58288B7FDAAFA30ECA7 /* TimezoneHandlingTests.swift in Sources */,
 			);
@@ -390,8 +411,10 @@
 				2DD31668B0E50A43917AFE3B /* SleepActivityAttributes.swift in Sources */,
 				68CD3B81C173F632E2D4D2F8 /* SleepAppIntents.swift in Sources */,
 				AA1328ADB5523A21B83B62CC /* SleepClassification.swift in Sources */,
+				6C92F4E64F5F7F7F4D323352 /* SleepConfigurationManager.swift in Sources */,
 				0E73621F45E5FEAFF7AB2232 /* SleepEvent.swift in Sources */,
 				176DBA0AC769F0E57ADF63BE /* SleepInterval.swift in Sources */,
+				2716DE66D3E53AE954BD461B /* SleepScheduleConfiguration.swift in Sources */,
 				C8B9693DBE74F5A3B08DD124 /* SleepTrackingService.swift in Sources */,
 				943F0B3B1C793BE2DD10E80B /* WidgetViews.swift in Sources */,
 			);
@@ -412,11 +435,14 @@
 				A7828872CC512CB04C92F5B0 /* LiveActivityManager.swift in Sources */,
 				BE9F24A9D8C4807216DCF976 /* MainDashboardView.swift in Sources */,
 				50ADD28FB1756869083E2D2A /* SQLiteDatabase.swift in Sources */,
+				1F383A13360348B46CAE9D49 /* SettingsView.swift in Sources */,
 				37B906729033BF91E0D8A17F /* SleepActivityAttributes.swift in Sources */,
 				D392A28E813DE5748B1F04C1 /* SleepAppIntents.swift in Sources */,
 				CE11BF3C0D7F498C395A4FF0 /* SleepClassification.swift in Sources */,
+				A4B3D77A9606A7DC7371CF0B /* SleepConfigurationManager.swift in Sources */,
 				764EF44F3B4F21AFC79E035F /* SleepEvent.swift in Sources */,
 				F33B1613949C2FC3FEDEA798 /* SleepInterval.swift in Sources */,
+				CF5B31D830DC738CCAEB585A /* SleepScheduleConfiguration.swift in Sources */,
 				EA56AC9E137E8349E4D3B4BC /* SleepTrackingService.swift in Sources */,
 				3C7805FC2CBFA0B60BA3920F /* TimelineHistoryView.swift in Sources */,
 			);
@@ -442,13 +468,15 @@
 				CODE_SIGN_ENTITLEMENTS = App/BabySleepTracker.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = Q6ZF97725U;
+				DEVELOPMENT_TEAM = 494H4HP6ZA;
 				INFOPLIST_FILE = App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				OTHER_LDFLAGS = "-lsqlite3";
+				OTHER_LDFLAGS = (
+					"-lsqlite3",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.samiro.babysleeptracker;
 				PRODUCT_NAME = BabySleepTracker;
 				SDKROOT = iphoneos;
@@ -524,14 +552,16 @@
 				CODE_SIGN_ENTITLEMENTS = Widget/BabySleepTrackerWidget.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = Q6ZF97725U;
+				DEVELOPMENT_TEAM = 494H4HP6ZA;
 				INFOPLIST_FILE = Widget/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				OTHER_LDFLAGS = "-lsqlite3";
+				OTHER_LDFLAGS = (
+					"-lsqlite3",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.samiro.babysleeptracker.widget;
 				PRODUCT_NAME = BabySleepTrackerWidget;
 				SDKROOT = iphoneos;
@@ -548,14 +578,16 @@
 				CODE_SIGN_ENTITLEMENTS = Widget/BabySleepTrackerWidget.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = Q6ZF97725U;
+				DEVELOPMENT_TEAM = 494H4HP6ZA;
 				INFOPLIST_FILE = Widget/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				OTHER_LDFLAGS = "-lsqlite3";
+				OTHER_LDFLAGS = (
+					"-lsqlite3",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.samiro.babysleeptracker.widget;
 				PRODUCT_NAME = BabySleepTrackerWidget;
 				SDKROOT = iphoneos;
@@ -570,19 +602,18 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGNING_ALLOWED = YES;
 				CODE_SIGNING_REQUIRED = NO;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = Q6ZF97725U;
+				CODE_SIGN_IDENTITY = "-";
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				OTHER_LDFLAGS = "-lsqlite3";
+				OTHER_LDFLAGS = (
+					"-lsqlite3",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.samiro.babysleeptracker.tests;
 				PRODUCT_NAME = BabySleepTrackerTests;
-				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -663,13 +694,15 @@
 				CODE_SIGN_ENTITLEMENTS = App/BabySleepTracker.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = Q6ZF97725U;
+				DEVELOPMENT_TEAM = 494H4HP6ZA;
 				INFOPLIST_FILE = App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				OTHER_LDFLAGS = "-lsqlite3";
+				OTHER_LDFLAGS = (
+					"-lsqlite3",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.samiro.babysleeptracker;
 				PRODUCT_NAME = BabySleepTracker;
 				SDKROOT = iphoneos;
@@ -684,19 +717,18 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGNING_ALLOWED = YES;
 				CODE_SIGNING_REQUIRED = NO;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = Q6ZF97725U;
+				CODE_SIGN_IDENTITY = "-";
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				OTHER_LDFLAGS = "-lsqlite3";
+				OTHER_LDFLAGS = (
+					"-lsqlite3",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.samiro.babysleeptracker.tests;
 				PRODUCT_NAME = BabySleepTrackerTests;
-				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				TARGETED_DEVICE_FAMILY = "1,2";

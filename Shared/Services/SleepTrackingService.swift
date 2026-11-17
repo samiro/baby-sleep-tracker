@@ -104,13 +104,8 @@ public final class SleepTrackingService: @unchecked Sendable {
 
             var finalClassification = classification
             if finalClassification == .unspecified && type == .sleep {
-                // Suggest daytime vs night sleep based on hour (19:00 - 07:00 is typically night)
-                let hour = Calendar.current.component(.hour, from: timestamp)
-                if hour >= 19 || hour < 7 {
-                    finalClassification = .nightSleep
-                } else {
-                    finalClassification = .nap
-                }
+                // Classify daytime vs night sleep based on configured schedule
+                finalClassification = SleepConfigurationManager.shared.configuration.classify(timestamp: timestamp)
             }
 
             let newEvent = SleepEvent(
@@ -144,6 +139,18 @@ public final class SleepTrackingService: @unchecked Sendable {
     public func deleteEvent(id: UUID) throws {
         try database.performTransaction {
             try database.deleteEvent(id: id)
+            notifyDataChanged()
+        }
+    }
+
+    @discardableResult
+    public func reclassifyUnspecifiedEvents() throws -> Int {
+        return try SleepConfigurationManager.shared.reclassifyUnspecifiedEvents(database: database)
+    }
+
+    public func resetAllData() throws {
+        try database.performTransaction {
+            try database.deleteAllEvents()
             notifyDataChanged()
         }
     }
@@ -328,7 +335,8 @@ public final class SleepTrackingService: @unchecked Sendable {
 
             totalSleep += effectiveDuration
 
-            let isNap = interval.classification == .nap || (interval.classification == .unspecified && calendar.component(.hour, from: interval.startTime) >= 7 && calendar.component(.hour, from: interval.startTime) < 19)
+            let config = SleepConfigurationManager.shared.configuration
+            let isNap = interval.classification == .nap || (interval.classification == .unspecified && config.isDayTime(for: interval.startTime, calendar: calendar))
 
             if isNap {
                 totalDaytimeSleep += effectiveDuration
