@@ -19,6 +19,12 @@ struct BabySleepTrackerApp: App {
                         Label("Historial", systemImage: "clock.arrow.circlepath")
                     }
                     .tag("history")
+
+                SettingsView()
+                    .tabItem {
+                        Label("Ajustes", systemImage: "gearshape.fill")
+                    }
+                    .tag("settings")
             }
             .onOpenURL { url in
                 handleDeepLink(url)
@@ -40,6 +46,8 @@ struct BabySleepTrackerApp: App {
         if url.scheme == "emanuelsleep" {
             if url.host == "history" {
                 selectedTab = "history"
+            } else if url.host == "settings" {
+                selectedTab = "settings"
             }
         }
     }

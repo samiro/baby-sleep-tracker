@@ -159,6 +159,14 @@ public struct MainDashboardView: View {
             .navigationTitle("Emanuel")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    NavigationLink {
+                        SettingsView()
+                    } label: {
+                        Label("Configuración", systemImage: "gearshape")
+                    }
+                }
+
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
                         TimelineHistoryView()
@@ -176,6 +184,9 @@ public struct MainDashboardView: View {
                 refresh()
             }
             .onReceive(NotificationCenter.default.publisher(for: .sleepEventsDidChange)) { _ in
+                refresh()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .sleepConfigurationDidChange)) { _ in
                 refresh()
             }
             .onReceive(timer) { _ in
