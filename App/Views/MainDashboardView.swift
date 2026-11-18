@@ -156,15 +156,6 @@ public struct MainDashboardView: View {
             }
             .navigationTitle(currentBabyName)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink {
-                        TimelineHistoryView()
-                    } label: {
-                        Label("Historial", systemImage: "clock.arrow.circlepath")
-                    }
-                }
-            }
             .alert("Aviso", isPresented: $showFeedbackAlert) {
                 Button("Entendido", role: .cancel) {}
             } message: {
