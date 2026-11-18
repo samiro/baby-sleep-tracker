@@ -55,7 +55,7 @@ public struct BabySleepTrackerLiveActivityWidget: Widget {
                     .foregroundColor(.indigo)
             }
             .keylineTint(Color.indigo)
-            .widgetURL(URL(string: "emanuelsleep://history"))
+            .widgetURL(URL(string: "babysleeptracker://history"))
         }
     }
 }
@@ -82,6 +82,6 @@ public struct SleepActivityCompactView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .widgetURL(URL(string: "emanuelsleep://history"))
+        .widgetURL(URL(string: "babysleeptracker://history"))
     }
 }

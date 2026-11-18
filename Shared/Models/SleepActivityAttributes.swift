@@ -13,7 +13,7 @@ public struct SleepActivityAttributes: ActivityAttributes {
             isSleeping: Bool,
             startDate: Date,
             statusTitle: String,
-            babyName: String = "Emanuel"
+            babyName: String = "Baby Sleep Tracker"
         ) {
             self.isSleeping = isSleeping
             self.startDate = startDate
@@ -24,7 +24,7 @@ public struct SleepActivityAttributes: ActivityAttributes {
 
     public var babyName: String
 
-    public init(babyName: String = "Emanuel") {
+    public init(babyName: String = "Baby Sleep Tracker") {
         self.babyName = babyName
     }
 }

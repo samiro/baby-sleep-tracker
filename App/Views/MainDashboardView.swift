@@ -1,16 +1,31 @@
 import SwiftUI
 
 public struct MainDashboardView: View {
+    @ObservedObject private var profileManager = BabyProfileManager.shared
+    @AppStorage(BabyProfileManager.babyNameKey) private var storedBabyName: String = ""
+    @State private var activeBabyName: String = BabyProfileManager.shared.displayName
     @State private var currentState: CurrentSleepState = .unknown
     @State private var mostRecentInterval: SleepInterval?
     @State private var todayMetrics: DayMetrics?
     @State private var feedbackMessage: String?
     @State private var showFeedbackAlert = false
     @State private var showAddEventSheet = false
+    @State private var showBabyNamePrompt = false
 
     private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
     public init() {}
+
+    private var currentBabyName: String {
+        let trimmed = storedBabyName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            return trimmed
+        }
+        if !activeBabyName.isEmpty && activeBabyName != BabyProfileManager.defaultAppName {
+            return activeBabyName
+        }
+        return profileManager.displayName
+    }
 
     private var isSleeping: Bool {
         currentState.isSleeping
@@ -26,7 +41,7 @@ public struct MainDashboardView: View {
                 VStack(spacing: 24) {
                     // Header greeting & baby name
                     VStack(spacing: 4) {
-                        Text("Emanuel")
+                        Text(currentBabyName)
                             .font(.system(size: 17, weight: .bold, design: .rounded))
                             .foregroundStyle(.secondary)
                         Text(isSleeping ? "Durmiendo plácidamente" : "Despierto y activo")
@@ -156,17 +171,9 @@ public struct MainDashboardView: View {
                 .padding(.horizontal)
                 .padding(.bottom, 32)
             }
-            .navigationTitle("Emanuel")
+            .navigationTitle(currentBabyName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    NavigationLink {
-                        SettingsView()
-                    } label: {
-                        Label("Configuración", systemImage: "gearshape")
-                    }
-                }
-
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
                         TimelineHistoryView()
@@ -180,8 +187,25 @@ public struct MainDashboardView: View {
             } message: {
                 Text(feedbackMessage ?? "")
             }
+            .sheet(isPresented: $showBabyNamePrompt) {
+                BabyNamePromptView(onComplete: {
+                    activeBabyName = BabyProfileManager.shared.displayName
+                })
+            }
             .onAppear {
+                activeBabyName = BabyProfileManager.shared.displayName
                 refresh()
+                if !profileManager.hasPromptedBabyName {
+                    showBabyNamePrompt = true
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .babyProfileDidChange)) { _ in
+                activeBabyName = BabyProfileManager.shared.displayName
+                refresh()
+            }
+            .onChange(of: storedBabyName) { _, newValue in
+                let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                activeBabyName = trimmed.isEmpty ? BabyProfileManager.shared.displayName : trimmed
             }
             .onReceive(NotificationCenter.default.publisher(for: .sleepEventsDidChange)) { _ in
                 refresh()
