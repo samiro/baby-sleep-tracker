@@ -191,6 +191,8 @@ public struct TimelineHistoryView: View {
                     .background(Color(.secondarySystemBackground))
                     .clipShape(Circle())
             }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Día anterior")
 
             Spacer()
 
@@ -214,7 +216,10 @@ public struct TimelineHistoryView: View {
                     .background(Color(.secondarySystemBackground))
                     .clipShape(Circle())
             }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Día siguiente")
         }
+        .buttonStyle(.borderless)
         .padding(.vertical, 4)
     }
 
