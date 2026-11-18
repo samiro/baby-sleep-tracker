@@ -4,7 +4,6 @@ import UIKit
 #endif
 
 public struct SettingsView: View {
-    @Environment(\.dismiss) private var dismiss
     @ObservedObject private var profileManager = BabyProfileManager.shared
     @AppStorage(BabyProfileManager.babyNameKey) private var storedBabyName: String = ""
 
@@ -205,17 +204,6 @@ public struct SettingsView: View {
             }
             .navigationTitle("Ajustes")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Listo") {
-                        if hasBabyNameChanges {
-                            saveBabyName(showAlert: false)
-                        }
-                        saveConfig()
-                        dismiss()
-                    }
-                }
-            }
             .onAppear {
                 loadInitialConfig()
                 editedBabyName = profileManager.babyName ?? ""
