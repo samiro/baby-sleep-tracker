@@ -39,7 +39,7 @@ public struct EmanuelSleepWidgetMediumView: View {
             VStack(alignment: .leading, spacing: 4) {
                 // Header
                 HStack(spacing: 4) {
-                    Text("Emanuel · Sueño")
+                    Text("\(BabyProfileManager.shared.displayName) · Sueño")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
@@ -153,6 +153,6 @@ public struct EmanuelSleepWidgetMediumView: View {
             .frame(width: 140)
         }
         .padding(.all, 8)
-        .widgetURL(URL(string: "emanuelsleep://history"))
+        .widgetURL(URL(string: "babysleeptracker://history"))
     }
 }

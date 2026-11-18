@@ -82,8 +82,8 @@ public struct BabySleepTrackerWidget: Widget {
             EmanuelSleepWidgetMediumView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
         }
-        .configurationDisplayName("Emanuel · Sueño")
-        .description("Registra el sueño y vigilia de Emanuel en un toque.")
+        .configurationDisplayName("Baby Sleep Tracker · Sueño")
+        .description("Registra el sueño y vigilia del bebé en un toque.")
         .supportedFamilies([.systemMedium])
     }
 }

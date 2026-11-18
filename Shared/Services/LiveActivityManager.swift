@@ -47,7 +47,7 @@ public final class LiveActivityManager: @unchecked Sendable {
             isSleeping: true,
             startDate: sinceDate,
             statusTitle: "Durmiendo",
-            babyName: "Emanuel"
+            babyName: BabyProfileManager.shared.displayName
         )
         let content = ActivityContent(state: contentState, staleDate: nil)
 
@@ -64,7 +64,7 @@ public final class LiveActivityManager: @unchecked Sendable {
             }
             return true
         } else {
-            let attributes = SleepActivityAttributes(babyName: "Emanuel")
+            let attributes = SleepActivityAttributes(babyName: BabyProfileManager.shared.displayName)
             do {
                 _ = try Activity.request(attributes: attributes, content: content, pushType: nil)
                 return true

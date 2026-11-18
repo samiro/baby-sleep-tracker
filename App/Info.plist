@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Emanuel</string>
+	<string>Baby Sleep Tracker</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -27,6 +27,7 @@
 			<string>com.samiro.babysleeptracker</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
+				<string>babysleeptracker</string>
 				<string>emanuelsleep</string>
 			</array>
 		</dict>

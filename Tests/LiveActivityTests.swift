@@ -25,7 +25,7 @@ final class LiveActivityTests: XCTestCase {
 
     func testSleepActivityAttributesInitialization() {
         let defaultAttributes = SleepActivityAttributes()
-        XCTAssertEqual(defaultAttributes.babyName, "Emanuel")
+        XCTAssertEqual(defaultAttributes.babyName, "Baby Sleep Tracker")
 
         let customAttributes = SleepActivityAttributes(babyName: "Baby")
         XCTAssertEqual(customAttributes.babyName, "Baby")

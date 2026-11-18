@@ -366,14 +366,14 @@ public struct TimelineHistoryView: View {
             switch format {
             case .csv:
                 let csvString = ExportService.shared.exportToCSV(events: all)
-                let fileURL = tempDir.appendingPathComponent("emanuel_sleep_export.csv")
+                let fileURL = tempDir.appendingPathComponent("baby_sleep_export.csv")
                 try csvString.write(to: fileURL, atomically: true, encoding: .utf8)
                 shareItems = [fileURL]
                 isSharePresented = true
 
             case .json:
                 let jsonData = try ExportService.shared.exportToJSON(events: all)
-                let fileURL = tempDir.appendingPathComponent("emanuel_sleep_export.json")
+                let fileURL = tempDir.appendingPathComponent("baby_sleep_export.json")
                 try jsonData.write(to: fileURL)
                 shareItems = [fileURL]
                 isSharePresented = true

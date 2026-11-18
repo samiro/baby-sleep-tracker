@@ -40,9 +40,9 @@ public enum SleepTrackingError: Error, LocalizedError, Equatable, Sendable {
         formatter.dateFormat = "HH:mm"
         switch self {
         case .alreadySleeping(let date):
-            return "Emanuel ya figura durmiendo desde las \(formatter.string(from: date))."
+            return "\(BabyProfileManager.shared.displayName) ya figura durmiendo desde las \(formatter.string(from: date))."
         case .alreadyAwake(let date):
-            return "Emanuel ya figura despierto desde las \(formatter.string(from: date))."
+            return "\(BabyProfileManager.shared.displayName) ya figura despierto desde las \(formatter.string(from: date))."
         case .invalidTimestamp(let message):
             return "Fecha inválida: \(message)"
         case .storage(let message):

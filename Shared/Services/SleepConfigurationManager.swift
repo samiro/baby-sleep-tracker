@@ -19,7 +19,8 @@ public final class SleepConfigurationManager: @unchecked Sendable {
     public init(userDefaults: UserDefaults? = nil) {
         if let userDefaults = userDefaults {
             self.userDefaults = userDefaults
-        } else if let suite = UserDefaults(suiteName: AppGroupCoordinator.appGroupId) {
+        } else if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppGroupCoordinator.appGroupId) != nil,
+                  let suite = UserDefaults(suiteName: AppGroupCoordinator.appGroupId) {
             self.userDefaults = suite
         } else {
             self.userDefaults = .standard
