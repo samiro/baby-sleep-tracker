@@ -25,8 +25,8 @@ public struct AddEditEventView: View {
         self.onDelete = onDelete
 
         let initialType: EventType
-        if let type = existingEvent?.type, type != .sleepAttempt {
-            initialType = type
+        if let type = existingEvent?.type, type == .wake {
+            initialType = .wake
         } else {
             initialType = .sleep
         }
@@ -44,7 +44,7 @@ public struct AddEditEventView: View {
     }
 
     private var availableEventTypes: [EventType] {
-        EventType.allCases.filter { $0 != .sleepAttempt }
+        [.sleep, .wake]
     }
 
     private var availableClassifications: [SleepClassification] {

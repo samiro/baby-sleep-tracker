@@ -1,6 +1,6 @@
 # Emanuel Sleep Tracker for iPhone 🌙☀️
 
-Minimalist, reliable native iOS app and interactive Home Screen widget for tracking an infant's sleep and wake schedule. Built for one-handed use and sleep-deprived parents. Routine tracking can be performed entirely from the Home Screen widget via App Intents without opening the app.
+Minimalist, reliable native iOS app and interactive Home Screen widget for tracking an infant's sleep and wake schedule. Built for one-handed use and sleep-deprived parents. Sleep tracking can be performed entirely from the Home Screen widget via App Intents without opening the app.
 
 ---
 
@@ -25,7 +25,6 @@ Minimalist, reliable native iOS app and interactive Home Screen widget for track
   - One-tap App Intent action buttons:
     - **"Se durmió"**: Starts sleep interval.
     - **"Despertó"**: Closes sleep interval and calculates duration.
-    - **"Iniciar rutina"**: Secondary action to log bedtime routine onset.
   - Deep link to the history screen (`emanuelsleep://history`).
 
 - **Companion App**:
@@ -35,8 +34,6 @@ Minimalist, reliable native iOS app and interactive Home Screen widget for track
     - Number of completed naps.
     - Total daytime sleep duration.
     - Night sleep onset time.
-    - Bedtime routine start time.
-    - Routine-to-sleep latency.
   - History & Timeline view:
     - Sleep intervals with visual durations.
     - Wake windows (awake intervals between sleeps).

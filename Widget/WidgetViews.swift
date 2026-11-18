@@ -133,22 +133,6 @@ public struct EmanuelSleepWidgetMediumView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
                 .buttonStyle(.plain)
-
-                // Secondary Button: "Rutina"
-                Button(intent: StartRoutineIntent()) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "book.fill")
-                            .font(.system(size: 10))
-                        Text("Iniciar rutina")
-                            .font(.system(size: 10, weight: .medium))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 4)
-                    .foregroundColor(.secondary)
-                    .background(Color.primary.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                }
-                .buttonStyle(.plain)
             }
             .frame(width: 140)
         }

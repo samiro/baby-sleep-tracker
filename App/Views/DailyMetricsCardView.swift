@@ -51,22 +51,6 @@ public struct DailyMetricsCardView: View {
                     title: "Inicio sueño nocturno",
                     value: metrics.nightSleepOnset.map { timeFormatter.string(from: $0) } ?? "--:--"
                 )
-
-                // Metric 5: Routine start
-                MetricCell(
-                    icon: "book.closed.fill",
-                    color: .purple,
-                    title: "Inicio de rutina",
-                    value: metrics.bedtimeRoutineStart.map { timeFormatter.string(from: $0) } ?? "--:--"
-                )
-
-                // Metric 6: Routine to sleep latency
-                MetricCell(
-                    icon: "hourglass",
-                    color: .teal,
-                    title: "Rutina a sueño",
-                    value: metrics.routineToSleepDuration.map { DayMetrics.formatDuration($0) } ?? "--:--"
-                )
             }
         }
         .padding()

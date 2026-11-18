@@ -127,23 +127,6 @@ public struct MainDashboardView: View {
                             .background(!isSleeping ? Color.gray.opacity(0.2) : Color.orange)
                             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                         }
-
-                        // "Iniciar rutina" secondary action
-                        Button {
-                            record(type: .bedtimeRoutineStart)
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "book.closed.fill")
-                                    .font(.system(size: 14, weight: .semibold))
-                                Text("Iniciar rutina de sueño")
-                                    .font(.system(size: 14, weight: .semibold))
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .foregroundColor(.secondary)
-                            .background(Color(.tertiarySystemBackground))
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        }
                     }
 
                     // Recent Interval & Quick Today Metrics
