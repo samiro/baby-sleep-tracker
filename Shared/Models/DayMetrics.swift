@@ -9,9 +9,7 @@ public struct DayMetrics: Equatable, Sendable {
     public let totalDaytimeSleepDuration: TimeInterval
     public let totalNightSleepDuration: TimeInterval
     public let totalSleepDuration: TimeInterval
-    public let bedtimeRoutineStart: Date?
     public let nightSleepOnset: Date?
-    public let routineToSleepDuration: TimeInterval?
 
     public init(
         date: Date,
@@ -22,9 +20,7 @@ public struct DayMetrics: Equatable, Sendable {
         totalDaytimeSleepDuration: TimeInterval,
         totalNightSleepDuration: TimeInterval,
         totalSleepDuration: TimeInterval,
-        bedtimeRoutineStart: Date?,
-        nightSleepOnset: Date?,
-        routineToSleepDuration: TimeInterval?
+        nightSleepOnset: Date?
     ) {
         self.date = date
         self.morningWakeTime = morningWakeTime
@@ -34,9 +30,7 @@ public struct DayMetrics: Equatable, Sendable {
         self.totalDaytimeSleepDuration = totalDaytimeSleepDuration
         self.totalNightSleepDuration = totalNightSleepDuration
         self.totalSleepDuration = totalSleepDuration
-        self.bedtimeRoutineStart = bedtimeRoutineStart
         self.nightSleepOnset = nightSleepOnset
-        self.routineToSleepDuration = routineToSleepDuration
     }
 
     public static func formatDuration(_ duration: TimeInterval) -> String {

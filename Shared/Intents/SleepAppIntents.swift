@@ -37,19 +37,3 @@ public struct RecordWakeIntent: AppIntent {
         }
     }
 }
-
-public struct StartRoutineIntent: AppIntent {
-    public static var title: LocalizedStringResource = "Iniciar rutina"
-    public static var description = IntentDescription("Registra el inicio de la rutina previa a dormir.")
-
-    public init() {}
-
-    public func perform() async throws -> some IntentResult & ProvidesDialog {
-        do {
-            try SleepTrackingService.shared.recordEvent(type: .bedtimeRoutineStart)
-            return .result(dialog: "Rutina iniciada.")
-        } catch {
-            return .result(dialog: "Error al registrar: \(error.localizedDescription)")
-        }
-    }
-}

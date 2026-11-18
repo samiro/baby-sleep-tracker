@@ -339,7 +339,8 @@ public struct TimelineHistoryView: View {
 
     private func reloadData() {
         let service = SleepTrackingService.shared
-        events = (try? service.fetchEvents(for: selectedDate)) ?? []
+        let dayEvents = (try? service.fetchEvents(for: selectedDate)) ?? []
+        events = dayEvents.filter { $0.type != .bedtimeRoutineStart }
         metrics = try? service.calculateDayMetrics(for: selectedDate)
     }
 

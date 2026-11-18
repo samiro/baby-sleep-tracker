@@ -303,24 +303,9 @@ public final class SleepTrackingService: @unchecked Sendable {
             return hour >= 4 && hour < 12
         }?.timestamp
 
-        // Bedtime routine start for this day (usually in evening >= 17:00, or latest routine start before night sleep)
+        // Night sleep onset: sleep event classified as nightSleep
         let dayEvents = try database.fetchEvents(from: startOfDay, to: endOfDay)
-        let routineEvent = dayEvents.last { $0.type == .bedtimeRoutineStart }
-        let routineStart = routineEvent?.timestamp
-
-        // Night sleep onset: sleep event after routineStart or classified as nightSleep
-        var nightSleepOnset: Date? = nil
-        if let routineStart = routineStart {
-            nightSleepOnset = dayEvents.first { $0.type == .sleep && $0.timestamp >= routineStart }?.timestamp
-        }
-        if nightSleepOnset == nil {
-            nightSleepOnset = dayEvents.first { $0.type == .sleep && $0.classification == .nightSleep }?.timestamp
-        }
-
-        var routineToSleep: TimeInterval? = nil
-        if let routine = routineStart, let onset = nightSleepOnset, onset >= routine {
-            routineToSleep = onset.timeIntervalSince(routine)
-        }
+        let nightSleepOnset = dayEvents.first { $0.type == .sleep && $0.classification == .nightSleep }?.timestamp
 
         // Durations calculation (clipped to this day's boundary for precise day metrics)
         var totalDaytimeSleep: TimeInterval = 0
@@ -357,9 +342,7 @@ public final class SleepTrackingService: @unchecked Sendable {
             totalDaytimeSleepDuration: totalDaytimeSleep,
             totalNightSleepDuration: totalNightSleep,
             totalSleepDuration: totalSleep,
-            bedtimeRoutineStart: routineStart,
-            nightSleepOnset: nightSleepOnset,
-            routineToSleepDuration: routineToSleep
+            nightSleepOnset: nightSleepOnset
         )
     }
 }
