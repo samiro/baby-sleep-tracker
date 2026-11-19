@@ -157,4 +157,191 @@ final class EventEditingAndDeletionTests: XCTestCase {
         try service.deleteEvent(id: recorded.id)
         wait(for: [expectationDelete], timeout: 2.0)
     }
+
+    // MARK: - Event Creation Form Validation & Automatic Classification Tests
+
+    func testClampedInitialTimestampPreventsFutureInitialDate() {
+        let now = Date(timeIntervalSince1970: 1_795_000_000)
+        let past = now.addingTimeInterval(-3600)
+        let future = now.addingTimeInterval(86400)
+
+        XCTAssertEqual(SleepEvent.clampedInitialTimestamp(past, now: now), past)
+        XCTAssertEqual(SleepEvent.clampedInitialTimestamp(now, now: now), now)
+        XCTAssertEqual(SleepEvent.clampedInitialTimestamp(future, now: now), now)
+    }
+
+    func testFormValidationRejectsFutureTimestampsAndClampsSameMinuteArtifact() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Bogota")!
+
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 15, minute: 30, second: 10))!
+        let futureDay = calendar.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 10, minute: 0, second: 0))!
+        let nextMinute = calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 15, minute: 31, second: 0))!
+        let sameMinuteLaterSecond = calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 15, minute: 30, second: 45))!
+        let past = calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 14, minute: 0, second: 0))!
+
+        XCTAssertThrowsError(
+            try SleepEvent.makeValidatedFormEvent(
+                type: .sleep,
+                timestamp: futureDay,
+                notes: nil,
+                configuration: .standard,
+                now: now,
+                calendar: calendar
+            )
+        ) { error in
+            XCTAssertEqual(error as? SleepEventFormValidationError, .futureTimestamp)
+        }
+
+        XCTAssertThrowsError(
+            try SleepEvent.makeValidatedFormEvent(
+                type: .wake,
+                timestamp: nextMinute,
+                notes: nil,
+                configuration: .standard,
+                now: now,
+                calendar: calendar
+            )
+        ) { error in
+            XCTAssertEqual(error as? SleepEventFormValidationError, .futureTimestamp)
+        }
+
+        let clampedCurrentMinute = try SleepEvent.makeValidatedFormEvent(
+            type: .sleep,
+            timestamp: sameMinuteLaterSecond,
+            notes: "  Siesta corta  ",
+            configuration: .standard,
+            now: now,
+            calendar: calendar
+        )
+        XCTAssertEqual(clampedCurrentMinute.timestamp, now)
+        XCTAssertEqual(clampedCurrentMinute.notes, "Siesta corta")
+
+        let pastEvent = try SleepEvent.makeValidatedFormEvent(
+            type: .sleep,
+            timestamp: past,
+            notes: "   ",
+            configuration: .standard,
+            now: now,
+            calendar: calendar
+        )
+        XCTAssertEqual(pastEvent.timestamp, past)
+        XCTAssertNil(pastEvent.notes)
+    }
+
+    func testFormAutomaticClassificationUsesConfigured24HourCycle() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Bogota")!
+
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 23, minute: 59, second: 0))!
+        let customConfig = SleepScheduleConfiguration(
+            nightStartHour: 21,
+            nightStartMinute: 0,
+            dayStartHour: 6,
+            dayStartMinute: 30
+        )
+
+        let earlyMorningNight = calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 6, minute: 29))!
+        let morningNap = calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 6, minute: 30))!
+        let eveningNapUnderCustomConfig = calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 20, minute: 0))!
+        let bedtimeNight = calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 21, minute: 0))!
+
+        let e1 = try SleepEvent.makeValidatedFormEvent(
+            type: .sleep,
+            timestamp: earlyMorningNight,
+            notes: nil,
+            configuration: customConfig,
+            now: now,
+            calendar: calendar
+        )
+        XCTAssertEqual(e1.classification, .nightSleep)
+
+        let e2 = try SleepEvent.makeValidatedFormEvent(
+            type: .sleep,
+            timestamp: morningNap,
+            notes: nil,
+            configuration: customConfig,
+            now: now,
+            calendar: calendar
+        )
+        XCTAssertEqual(e2.classification, .nap)
+
+        // At 20:00: standard schedule would classify as nightSleep, custom 21:00 schedule classifies as nap
+        let e3Custom = try SleepEvent.makeValidatedFormEvent(
+            type: .sleep,
+            timestamp: eveningNapUnderCustomConfig,
+            notes: nil,
+            configuration: customConfig,
+            now: now,
+            calendar: calendar
+        )
+        XCTAssertEqual(e3Custom.classification, .nap)
+
+        let e3Standard = try SleepEvent.makeValidatedFormEvent(
+            type: .sleep,
+            timestamp: eveningNapUnderCustomConfig,
+            notes: nil,
+            configuration: .standard,
+            now: now,
+            calendar: calendar
+        )
+        XCTAssertEqual(e3Standard.classification, .nightSleep)
+
+        let e4 = try SleepEvent.makeValidatedFormEvent(
+            type: .sleep,
+            timestamp: bedtimeNight,
+            notes: nil,
+            configuration: customConfig,
+            now: now,
+            calendar: calendar
+        )
+        XCTAssertEqual(e4.classification, .nightSleep)
+
+        // Wake events remain unspecified
+        let wakeEvent = try SleepEvent.makeValidatedFormEvent(
+            type: .wake,
+            timestamp: bedtimeNight,
+            notes: nil,
+            configuration: customConfig,
+            now: now,
+            calendar: calendar
+        )
+        XCTAssertEqual(wakeEvent.classification, .unspecified)
+    }
+
+    func testFormEditingExistingEventReclassifiesAutomaticallyAndPreservesIdentity() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Bogota")!
+
+        let createdAt = calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 14, minute: 0))!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 22, minute: 0))!
+        let updatedNightTime = calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 20, minute: 30))!
+
+        let existing = SleepEvent(
+            id: UUID(),
+            type: .sleep,
+            timestamp: createdAt,
+            classification: .nap,
+            notes: "Original",
+            createdAt: createdAt,
+            updatedAt: createdAt
+        )
+
+        let edited = try SleepEvent.makeValidatedFormEvent(
+            existingEvent: existing,
+            type: .sleep,
+            timestamp: updatedNightTime,
+            notes: "Editado",
+            configuration: .standard,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(edited.id, existing.id)
+        XCTAssertEqual(edited.createdAt, existing.createdAt)
+        XCTAssertEqual(edited.updatedAt, now)
+        XCTAssertEqual(edited.timestamp, updatedNightTime)
+        XCTAssertEqual(edited.classification, .nightSleep)
+        XCTAssertEqual(edited.notes, "Editado")
+    }
 }

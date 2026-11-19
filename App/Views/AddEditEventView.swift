@@ -9,7 +9,6 @@ public struct AddEditEventView: View {
 
     @State private var eventType: EventType
     @State private var timestamp: Date
-    @State private var classification: SleepClassification
     @State private var notes: String
     @State private var showDeleteConfirmation = false
     @State private var errorMessage: String?
@@ -31,24 +30,12 @@ public struct AddEditEventView: View {
             initialType = .sleep
         }
         _eventType = State(initialValue: initialType)
-        _timestamp = State(initialValue: existingEvent?.timestamp ?? initialDate)
-
-        let initialClassification: SleepClassification
-        if let classification = existingEvent?.classification, classification != .unspecified {
-            initialClassification = classification
-        } else {
-            initialClassification = .nap
-        }
-        _classification = State(initialValue: initialClassification)
+        _timestamp = State(initialValue: existingEvent?.timestamp ?? SleepEvent.clampedInitialTimestamp(initialDate))
         _notes = State(initialValue: existingEvent?.notes ?? "")
     }
 
     private var availableEventTypes: [EventType] {
         [.sleep, .wake]
-    }
-
-    private var availableClassifications: [SleepClassification] {
-        SleepClassification.allCases.filter { $0 != .unspecified }
     }
 
     public var body: some View {
@@ -75,19 +62,14 @@ public struct AddEditEventView: View {
                     DatePicker(
                         "Hora del evento",
                         selection: $timestamp,
+                        in: ...Date(),
                         displayedComponents: [.date, .hourAndMinute]
                     )
                     .datePickerStyle(.compact)
-                }
-
-                if eventType == .sleep {
-                    Section(header: Text("Clasificación del sueño")) {
-                        Picker("Clasificación", selection: $classification) {
-                            ForEach(availableClassifications, id: \.self) { item in
-                                Label(item.displayName, systemImage: item.iconName).tag(item)
-                            }
+                    .onChange(of: timestamp) { _, newValue in
+                        if errorMessage != nil, (try? SleepEvent.validatedTimestamp(newValue)) != nil {
+                            errorMessage = nil
                         }
-                        .pickerStyle(.segmented)
                     }
                 }
 
@@ -143,20 +125,21 @@ public struct AddEditEventView: View {
     }
 
     private func save() {
-        let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
-        let finalNotes = trimmedNotes.isEmpty ? nil : trimmedNotes
+        let configuration = SleepConfigurationManager.shared.configuration
 
-        let event = SleepEvent(
-            id: existingEvent?.id ?? UUID(),
-            type: eventType,
-            timestamp: timestamp,
-            classification: eventType == .sleep ? classification : .unspecified,
-            notes: finalNotes,
-            createdAt: existingEvent?.createdAt ?? Date(),
-            updatedAt: Date()
-        )
-
-        onSave(event)
-        dismiss()
+        do {
+            let event = try SleepEvent.makeValidatedFormEvent(
+                existingEvent: existingEvent,
+                type: eventType,
+                timestamp: timestamp,
+                notes: notes,
+                configuration: configuration
+            )
+            errorMessage = nil
+            onSave(event)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }
