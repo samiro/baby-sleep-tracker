@@ -69,4 +69,86 @@ final class SleepIntervalTests: XCTestCase {
         let activeAwake = awakes[1]
         XCTAssertNil(activeAwake.nextSleepEvent)
     }
+
+    func testMostRecentIntervalWhenEmpty() throws {
+        let interval = try service.getMostRecentInterval()
+        XCTAssertNil(interval)
+    }
+
+    func testMostRecentIntervalWhenSleeping() throws {
+        let sleepTime = Date().addingTimeInterval(-1800)
+        try service.recordEvent(type: .sleep, timestamp: sleepTime, classification: .nap)
+
+        guard let interval = try service.getMostRecentInterval() else {
+            XCTFail("Expected most recent interval to exist")
+            return
+        }
+
+        XCTAssertEqual(interval.statusText, "Dormido")
+        if case .sleep(let sleepInterval) = interval {
+            XCTAssertFalse(sleepInterval.isCompleted)
+            XCTAssertNil(sleepInterval.endTime)
+        } else {
+            XCTFail("Expected .sleep interval")
+        }
+    }
+
+    func testMostRecentIntervalWhenAwake() throws {
+        let sleepTime = Date().addingTimeInterval(-7200)
+        let wakeTime = Date().addingTimeInterval(-3600)
+        try service.recordEvent(type: .sleep, timestamp: sleepTime, classification: .nap)
+        try service.recordEvent(type: .wake, timestamp: wakeTime)
+
+        guard let interval = try service.getMostRecentInterval() else {
+            XCTFail("Expected most recent interval to exist")
+            return
+        }
+
+        XCTAssertEqual(interval.statusText, "Despierto")
+        if case .awake(let awakeInterval) = interval {
+            XCTAssertFalse(awakeInterval.isCompleted)
+            XCTAssertNil(awakeInterval.nextSleepEvent)
+        } else {
+            XCTFail("Expected .awake interval")
+        }
+    }
+
+    func testMostRecentIntervalAlternatingSequences() throws {
+        let t0 = Date().addingTimeInterval(-10800)
+        let t1 = Date().addingTimeInterval(-7200)
+        let t2 = Date().addingTimeInterval(-3600)
+
+        // Sleep 1
+        try service.recordEvent(type: .sleep, timestamp: t0, classification: .nap)
+        var interval = try service.getMostRecentInterval()
+        XCTAssertEqual(interval?.statusText, "Dormido")
+
+        // Wake 1
+        try service.recordEvent(type: .wake, timestamp: t1)
+        interval = try service.getMostRecentInterval()
+        XCTAssertEqual(interval?.statusText, "Despierto")
+
+        // Sleep 2
+        try service.recordEvent(type: .sleep, timestamp: t2, classification: .nap)
+        interval = try service.getMostRecentInterval()
+        XCTAssertEqual(interval?.statusText, "Dormido")
+    }
+
+    func testAwakeIntervalSummaryText() throws {
+        let calendar = Calendar.current
+        var comps = calendar.dateComponents([.year, .month, .day], from: Date())
+        comps.hour = 10
+        comps.minute = 0
+        let t0 = calendar.date(from: comps)!
+        let t1 = t0.addingTimeInterval(5400) // 11:30 (1h 30m)
+
+        let wakeEvent = SleepEvent(type: .wake, timestamp: t0)
+        let sleepEvent = SleepEvent(type: .sleep, timestamp: t1)
+
+        let completedAwake = AwakeInterval(wakeEvent: wakeEvent, nextSleepEvent: sleepEvent)
+        XCTAssertEqual(completedAwake.summaryText, "10:00 - 11:30 (1h 30m)")
+
+        let ongoingAwake = AwakeInterval(wakeEvent: wakeEvent, nextSleepEvent: nil)
+        XCTAssertTrue(ongoingAwake.summaryText.hasPrefix("10:00 - Ahora"))
+    }
 }

@@ -5,7 +5,7 @@ public struct MainDashboardView: View {
     @AppStorage(BabyProfileManager.babyNameKey) private var storedBabyName: String = ""
     @State private var activeBabyName: String = BabyProfileManager.shared.displayName
     @State private var currentState: CurrentSleepState = .unknown
-    @State private var mostRecentInterval: SleepInterval?
+    @State private var mostRecentInterval: TrackedInterval?
     @State private var todayMetrics: DayMetrics?
     @State private var feedbackMessage: String?
     @State private var showFeedbackAlert = false
@@ -136,7 +136,7 @@ public struct MainDashboardView: View {
                                 Text("Último intervalo")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
-                                Text(recent.summaryText)
+                                Text("\(recent.statusText): \(recent.summaryText)")
                                     .font(.subheadline)
                                     .fontWeight(.semibold)
                             }
@@ -218,7 +218,7 @@ public struct MainDashboardView: View {
     private func refresh() {
         let service = SleepTrackingService.shared
         currentState = (try? service.getCurrentState()) ?? .unknown
-        mostRecentInterval = try? service.getMostRecentSleepInterval()
+        mostRecentInterval = try? service.getMostRecentInterval()
         todayMetrics = try? service.calculateDayMetrics(for: Date())
     }
 }
