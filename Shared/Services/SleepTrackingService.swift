@@ -201,6 +201,29 @@ public final class SleepTrackingService: @unchecked Sendable {
         return sleepIntervals.last
     }
 
+    public func getMostRecentInterval() throws -> TrackedInterval? {
+        let events = try database.fetchAllEvents(ascending: true)
+        let (sleepIntervals, awakeIntervals) = computeIntervals(from: events)
+
+        let lastSleep = sleepIntervals.last
+        let lastAwake = awakeIntervals.last
+
+        switch (lastSleep, lastAwake) {
+        case (.some(let sleep), .some(let awake)):
+            if sleep.startTime >= awake.startTime {
+                return .sleep(sleep)
+            } else {
+                return .awake(awake)
+            }
+        case (.some(let sleep), .none):
+            return .sleep(sleep)
+        case (.none, .some(let awake)):
+            return .awake(awake)
+        case (.none, .none):
+            return nil
+        }
+    }
+
     public func fetchAllEvents(ascending: Bool = true) throws -> [SleepEvent] {
         return try database.fetchAllEvents(ascending: ascending)
     }
