@@ -20,7 +20,15 @@ public struct DailyMetricsCardView: View {
                 .foregroundStyle(.primary)
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                // Metric 1: Morning wake
+                // Metric 1: Night sleep onset
+                MetricCell(
+                    icon: "moon.fill",
+                    color: .indigo,
+                    title: "Inicio sueño nocturno",
+                    value: metrics.nightSleepOnset.map { timeFormatter.string(from: $0) } ?? "--:--"
+                )
+
+                // Metric 2: Morning wake
                 MetricCell(
                     icon: "sunrise.fill",
                     color: .orange,
@@ -28,7 +36,15 @@ public struct DailyMetricsCardView: View {
                     value: metrics.morningWakeTime.map { timeFormatter.string(from: $0) } ?? "--:--"
                 )
 
-                // Metric 2: Completed naps
+                // Metric 3: Total Night sleep
+                MetricCell(
+                    icon: "moon.stars.fill",
+                    color: .purple,
+                    title: "Sueño nocturno total",
+                    value: DayMetrics.formatDuration(metrics.totalNightSleepDuration)
+                )
+
+                // Metric 4: Completed naps
                 MetricCell(
                     icon: "sun.haze.fill",
                     color: .yellow,
@@ -36,20 +52,12 @@ public struct DailyMetricsCardView: View {
                     value: "\(metrics.completedNapsCount) siestas"
                 )
 
-                // Metric 3: Total Daytime sleep
+                // Metric 5: Total Daytime sleep
                 MetricCell(
                     icon: "clock.badge.checkmark",
                     color: .blue,
                     title: "Sueño diurno total",
                     value: DayMetrics.formatDuration(metrics.totalDaytimeSleepDuration)
-                )
-
-                // Metric 4: Night sleep onset
-                MetricCell(
-                    icon: "moon.fill",
-                    color: .indigo,
-                    title: "Inicio sueño nocturno",
-                    value: metrics.nightSleepOnset.map { timeFormatter.string(from: $0) } ?? "--:--"
                 )
             }
         }
