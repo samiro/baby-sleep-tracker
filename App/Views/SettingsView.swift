@@ -8,8 +8,7 @@ public struct SettingsView: View {
     @AppStorage(BabyProfileManager.babyNameKey) private var storedBabyName: String = ""
 
     // Baby name state
-    @State private var editedBabyName: String = ""
-    @State private var showSavedBabyNameAlert: Bool = false
+    @State private var showEditBabyNameModal: Bool = false
     @State private var showResetBabyNameConfirmation: Bool = false
 
     // Configuration state
@@ -69,74 +68,43 @@ public struct SettingsView: View {
             Form {
                 // Section: Perfil / Nombre en homescreen
                 Section {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Nombre del bebé")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .textCase(.uppercase)
+                    HStack {
+                        Text(profileManager.displayName)
+                            .font(.system(size: 17, design: .rounded))
+                            .foregroundColor(.primary)
 
-                        HStack {
-                            TextField(BabyProfileManager.defaultAppName, text: $editedBabyName)
-                                .font(.system(size: 17, design: .rounded))
-                                .autocorrectionDisabled()
-                                .textInputAutocapitalization(.words)
-                                .submitLabel(.done)
-                                .onChange(of: editedBabyName) { _, newValue in
-                                    let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    profileManager.setBabyName(trimmed.isEmpty ? nil : trimmed)
-                                }
-                                .onSubmit {
-                                    saveBabyName(showAlert: true)
-                                }
+                        Spacer()
 
-                            if !editedBabyName.isEmpty {
-                                Button {
-                                    editedBabyName = ""
-                                    profileManager.setBabyName(nil)
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundColor(.secondary)
-                                }
-                                .buttonStyle(.plain)
-                            }
+                        Button {
+                            showEditBabyNameModal = true
+                        } label: {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.accentColor)
+                                .frame(minWidth: 32, minHeight: 32)
+                                .contentShape(Rectangle())
                         }
-                    }
-                    .padding(.vertical, 4)
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Editar")
 
-                    // Button to save name changes
-                    Button {
-                        saveBabyName(showAlert: true)
-                    } label: {
-                        HStack {
-                            Spacer()
-                            Text("Guardar nombre")
-                                .fontWeight(.semibold)
-                            Spacer()
-                        }
-                    }
-
-                    // Button to reset to default app name
-                    if profileManager.babyName != nil || !editedBabyName.isEmpty {
-                        Button(role: .destructive) {
+                        Button {
                             showResetBabyNameConfirmation = true
                         } label: {
-                            HStack {
-                                Spacer()
-                                Text("Restablecer a nombre por defecto")
-                                Spacer()
-                            }
+                            Image(systemName: "xmark")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.red)
+                                .frame(minWidth: 32, minHeight: 32)
+                                .contentShape(Rectangle())
                         }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Eliminar")
                     }
+                    .padding(.vertical, 4)
                 } header: {
                     Label("Nombre en Homescreen", systemImage: "person.crop.circle")
                 } footer: {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Este nombre se mostrará en el encabezado y barra de navegación de la pantalla principal.")
-                        Text("Actualmente se muestra: **\(profileManager.displayName)**")
-                            .foregroundColor(.primary)
-                        Text("Si no se especifica un nombre, el homescreen mostrará el nombre por defecto: **\(BabyProfileManager.defaultAppName)**.")
-                    }
-                    .font(.caption)
+                    Text("Este nombre se mostrará en el encabezado y barra de navegación de la pantalla principal.")
+                        .font(.caption)
                 }
 
                 // Section 1: Interactive 24-Hour Cycle Bar
@@ -204,22 +172,11 @@ public struct SettingsView: View {
             }
             .navigationTitle("Ajustes")
             .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $showEditBabyNameModal) {
+                EditBabyNameSheet(profileManager: profileManager)
+            }
             .onAppear {
                 loadInitialConfig()
-                editedBabyName = profileManager.babyName ?? ""
-            }
-            .onDisappear {
-                if hasBabyNameChanges {
-                    saveBabyName(showAlert: false)
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .babyProfileDidChange)) { _ in
-                editedBabyName = profileManager.babyName ?? ""
-            }
-            .alert("Nombre guardado", isPresented: $showSavedBabyNameAlert) {
-                Button("Aceptar", role: .cancel) {}
-            } message: {
-                Text("El nombre en la pantalla principal ha sido actualizado a \"\(profileManager.displayName)\".")
             }
             .confirmationDialog(
                 "¿Restablecer nombre por defecto?",
@@ -228,11 +185,10 @@ public struct SettingsView: View {
             ) {
                 Button("Restablecer", role: .destructive) {
                     profileManager.setBabyName(nil)
-                    editedBabyName = ""
                 }
                 Button("Cancelar", role: .cancel) {}
             } message: {
-                Text("Se eliminará el nombre personalizado y la pantalla principal volverá a mostrar \"\(BabyProfileManager.defaultAppName)\".")
+                Text("Se restablecerá el nombre por defecto (\(BabyProfileManager.defaultAppName)).")
             }
             .alert("Información", isPresented: $showAlert) {
                 Button("Aceptar", role: .cancel) {}
@@ -448,26 +404,77 @@ public struct SettingsView: View {
             showAlert = true
         }
     }
+}
 
-    // MARK: - Baby Name Actions
+// MARK: - Edit Baby Name Modal
 
-    private var trimmedBabyNameInput: String {
-        editedBabyName.trimmingCharacters(in: .whitespacesAndNewlines)
+public struct EditBabyNameSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var profileManager: BabyProfileManager
+    @State private var name: String
+    private let onSave: ((String?) -> Void)?
+
+    public init(
+        profileManager: BabyProfileManager = .shared,
+        initialName: String? = nil,
+        onSave: ((String?) -> Void)? = nil
+    ) {
+        self.profileManager = profileManager
+        let startingName = initialName ?? profileManager.babyName ?? ""
+        _name = State(initialValue: startingName)
+        self.onSave = onSave
     }
 
-    private var hasBabyNameChanges: Bool {
-        trimmedBabyNameInput != (profileManager.babyName ?? "")
+    public var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Nombre del bebé", text: $name)
+                        .font(.system(size: 17, design: .rounded))
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.words)
+                        .submitLabel(.done)
+                        .onSubmit {
+                            save()
+                        }
+                } header: {
+                    Text("Nombre del bebé")
+                } footer: {
+                    Text("Este nombre se mostrará en el encabezado y barra de navegación de la pantalla principal.")
+                        .font(.caption)
+                }
+            }
+            .navigationTitle("Editar nombre")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancelar") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Guardar") {
+                        save()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 
-    private func saveBabyName(showAlert: Bool = true) {
-        let nameToSave = trimmedBabyNameInput.isEmpty ? nil : trimmedBabyNameInput
-        profileManager.setBabyName(nameToSave)
+    private func save() {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalName = trimmed.isEmpty ? nil : trimmed
+        if let onSave = onSave {
+            onSave(finalName)
+        } else {
+            profileManager.setBabyName(finalName)
+        }
         #if canImport(UIKit)
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         #endif
-        if showAlert {
-            showSavedBabyNameAlert = true
-        }
+        dismiss()
     }
 }
 
