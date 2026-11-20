@@ -3,6 +3,7 @@ import SwiftUI
 public struct TimelineHistoryView: View {
     @State private var selectedDate: Date = Date()
     @State private var events: [SleepEvent] = []
+    @State private var incompleteEventReasons: [UUID: SleepEventIncompleteReason] = [:]
     @State private var metrics: DayMetrics?
     @State private var editingEvent: SleepEvent?
     @State private var isAddingEvent = false
@@ -283,46 +284,91 @@ public struct TimelineHistoryView: View {
     }
 
     private func eventRow(for event: SleepEvent) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: event.type.iconName)
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(colorForEvent(event.type))
-                .frame(width: 32, height: 32)
-                .background(colorForEvent(event.type).opacity(0.15))
-                .clipShape(Circle())
+        let incompleteReason = incompleteEventReasons[event.id]
+        let isOngoing = incompleteReason?.isOngoing ?? false
+        let isWarning = incompleteReason != nil && !isOngoing
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack {
-                    Text(event.type.displayName)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                    if event.type == .sleep {
-                        Text("(\(event.classification.displayName))")
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                Image(systemName: isWarning ? "exclamationmark.triangle.fill" : event.type.iconName)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(isWarning ? .orange : colorForEvent(event.type))
+                    .frame(width: 32, height: 32)
+                    .background((isWarning ? Color.orange : colorForEvent(event.type)).opacity(0.15))
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(event.type.displayName)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                        if event.type == .sleep {
+                            Text("(\(event.classification.displayName))")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        if let reason = incompleteReason {
+                            Text(reason.badgeTitle)
+                                .font(.caption2)
+                                .fontWeight(.bold)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(isOngoing ? Color.green.opacity(0.2) : Color.orange.opacity(0.18))
+                                .foregroundColor(isOngoing ? .green : .orange)
+                                .clipShape(Capsule())
+                        }
+                    }
+
+                    if let notes = event.notes, !notes.isEmpty {
+                        Text(notes)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                            .lineLimit(2)
                     }
                 }
 
-                if let notes = event.notes, !notes.isEmpty {
-                    Text(notes)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
+                Spacer()
+
+                Text(timeFormatter.string(from: event.timestamp))
+                    .font(.subheadline)
+                    .monospacedDigit()
+                    .fontWeight(.medium)
             }
 
-            Spacer()
-
-            Text(timeFormatter.string(from: event.timestamp))
-                .font(.subheadline)
-                .monospacedDigit()
-                .fontWeight(.medium)
+            if let explanation = incompleteReason?.explanationMessage {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "info.circle.fill")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                        .padding(.top, 1)
+                    Text(explanation)
+                        .font(.caption)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.orange.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity)
-        .background(Color(.secondarySystemBackground))
+        .background(
+            ZStack {
+                Color(.secondarySystemBackground)
+                if isWarning {
+                    Color.orange.opacity(0.06)
+                }
+            }
+        )
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(isWarning ? Color.orange.opacity(0.7) : Color.clear, lineWidth: 1.5)
+        )
     }
 
     // MARK: - Actions
@@ -346,6 +392,7 @@ public struct TimelineHistoryView: View {
         let service = SleepTrackingService.shared
         let dayEvents = (try? service.fetchEvents(for: selectedDate)) ?? []
         events = dayEvents.filter { $0.type != .bedtimeRoutineStart }
+        incompleteEventReasons = (try? service.fetchIncompleteEventReasons()) ?? [:]
         metrics = try? service.calculateDayMetrics(for: selectedDate)
     }
 
