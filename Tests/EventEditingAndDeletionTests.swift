@@ -111,22 +111,26 @@ final class EventEditingAndDeletionTests: XCTestCase {
         XCTAssertTrue(metrics.sleepIntervals[0].isCompleted)
         XCTAssertEqual(metrics.sleepIntervals[0].duration, 3600, accuracy: 1.0)
 
-        // Delete the wake event -> interval becomes in-progress
+        // Delete the wake event -> sleep event becomes incomplete and excluded from sleep blocks
         let events = try service.fetchEvents(for: baseTime)
         let wakeEvent = events.first { $0.type == .wake }!
         try service.deleteEvent(id: wakeEvent.id)
 
         metrics = try service.calculateDayMetrics(for: baseTime)
-        XCTAssertEqual(metrics.sleepIntervals.count, 1)
-        XCTAssertFalse(metrics.sleepIntervals[0].isCompleted)
+        XCTAssertEqual(metrics.sleepIntervals.count, 0)
+        XCTAssertEqual(metrics.totalSleepDuration, 0, accuracy: 0.1)
 
-        // Delete the sleep event -> intervals become empty
         let remainingEvents = try service.fetchEvents(for: baseTime)
         let sleepEvent = remainingEvents.first { $0.type == .sleep }!
+        let incomplete = try service.fetchIncompleteEventReasons()
+        XCTAssertEqual(incomplete[sleepEvent.id], .missingSubsequentWake(isLatestTimelineEvent: true))
+
+        // Delete the sleep event -> intervals and incomplete reasons become empty
         try service.deleteEvent(id: sleepEvent.id)
 
         metrics = try service.calculateDayMetrics(for: baseTime)
         XCTAssertEqual(metrics.sleepIntervals.count, 0)
+        XCTAssertTrue((try service.fetchIncompleteEventReasons()).isEmpty)
     }
 
     func testDeleteNonExistentEventDoesNotAffectExistingEvents() throws {

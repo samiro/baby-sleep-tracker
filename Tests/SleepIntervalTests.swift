@@ -35,17 +35,129 @@ final class SleepIntervalTests: XCTestCase {
         XCTAssertEqual(interval.classification, .nap)
     }
 
-    func testIncompleteActiveSleepInterval() throws {
+    func testIncompleteActiveSleepIntervalIsExcludedUntilCompleted() throws {
         let sleepTime = Date().addingTimeInterval(-1800) // 30 mins ago
         let sleepEvent = SleepEvent(type: .sleep, timestamp: sleepTime, classification: .nap)
 
-        let (sleeps, _) = service.computeIntervals(from: [sleepEvent])
+        let analysis = service.analyzeTimeline(from: [sleepEvent])
 
-        XCTAssertEqual(sleeps.count, 1)
-        let interval = sleeps[0]
-        XCTAssertFalse(interval.isCompleted)
-        XCTAssertNil(interval.endTime)
-        XCTAssertGreaterThanOrEqual(interval.duration, 1800)
+        XCTAssertTrue(analysis.sleepIntervals.isEmpty)
+        XCTAssertEqual(
+            analysis.incompleteEventReasons[sleepEvent.id],
+            .missingSubsequentWake(isLatestTimelineEvent: true)
+        )
+        let reason = analysis.incompleteEventReasons[sleepEvent.id]
+        XCTAssertEqual(reason?.badgeTitle, "En curso")
+        XCTAssertTrue(reason?.isOngoing == true)
+        XCTAssertNil(reason?.explanationMessage)
+    }
+
+    func testConsecutiveSleepEventsPairSecondWithWakeAndFlagFirstAsIncomplete() throws {
+        let calendar = Calendar.current
+        var comps = calendar.dateComponents([.year, .month, .day], from: Date())
+        comps.hour = 10
+        comps.minute = 0
+        let tA = calendar.date(from: comps)!
+        let tB = tA.addingTimeInterval(3600) // 11:00
+        let tC = tA.addingTimeInterval(7200) // 12:00
+
+        let sleepA = SleepEvent(type: .sleep, timestamp: tA, classification: .nap)
+        let sleepB = SleepEvent(type: .sleep, timestamp: tB, classification: .nap)
+        let wakeC = SleepEvent(type: .wake, timestamp: tC)
+
+        let analysis = service.analyzeTimeline(from: [sleepA, sleepB, wakeC])
+
+        // Only B -> C forms a valid sleep block
+        XCTAssertEqual(analysis.sleepIntervals.count, 1)
+        XCTAssertEqual(analysis.sleepIntervals[0].startEvent.id, sleepB.id)
+        XCTAssertEqual(analysis.sleepIntervals[0].endEvent?.id, wakeC.id)
+        XCTAssertEqual(analysis.sleepIntervals[0].duration, 3600, accuracy: 0.1)
+
+        // A is flagged as incomplete; B and C are complete
+        XCTAssertEqual(analysis.incompleteEventReasons.count, 1)
+        let reasonA = analysis.incompleteEventReasons[sleepA.id]
+        XCTAssertEqual(reasonA, .missingSubsequentWake(isLatestTimelineEvent: false))
+        XCTAssertEqual(
+            reasonA?.explanationMessage,
+            "Evento incompleto: falta registrar el evento 'Se despertó' posterior para incluirlo en los bloques de sueño."
+        )
+        XCTAssertNil(analysis.incompleteEventReasons[sleepB.id])
+        XCTAssertNil(analysis.incompleteEventReasons[wakeC.id])
+    }
+
+    func testOrphanWakeEventsAreIgnoredAndFlaggedAsIncomplete() throws {
+        let t0 = Date().addingTimeInterval(-10800)
+        let orphanWakeFirst = SleepEvent(type: .wake, timestamp: t0)
+        let sleep1 = SleepEvent(type: .sleep, timestamp: t0.addingTimeInterval(1800), classification: .nap)
+        let wake1 = SleepEvent(type: .wake, timestamp: t0.addingTimeInterval(5400))
+        let orphanWakeDuplicate = SleepEvent(type: .wake, timestamp: t0.addingTimeInterval(7200))
+
+        let analysis = service.analyzeTimeline(from: [orphanWakeFirst, sleep1, wake1, orphanWakeDuplicate])
+
+        XCTAssertEqual(analysis.sleepIntervals.count, 1)
+        XCTAssertEqual(analysis.sleepIntervals[0].startEvent.id, sleep1.id)
+        XCTAssertEqual(analysis.sleepIntervals[0].endEvent?.id, wake1.id)
+        XCTAssertEqual(analysis.sleepIntervals[0].duration, 3600, accuracy: 0.1)
+
+        XCTAssertEqual(analysis.incompleteEventReasons.count, 2)
+        XCTAssertEqual(analysis.incompleteEventReasons[orphanWakeFirst.id], .missingPrecedingSleep)
+        XCTAssertEqual(analysis.incompleteEventReasons[orphanWakeDuplicate.id], .missingPrecedingSleep)
+        XCTAssertEqual(
+            analysis.incompleteEventReasons[orphanWakeFirst.id]?.explanationMessage,
+            "Evento incompleto: falta registrar el evento 'Se durmió' anterior para incluirlo en los bloques de sueño."
+        )
+    }
+
+    func testAddingMissingEventInChronologicalOrderCompletesBlockAndClearsWarning() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Bogota")!
+
+        let day = calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 9, minute: 0))!
+        let tSleepA = day
+        let tMissingWake = day.addingTimeInterval(3600) // 10:00
+        let tSleepB = day.addingTimeInterval(7200) // 11:00
+        let tWakeC = day.addingTimeInterval(10800) // 12:00
+
+        let sleepA = try service.recordEvent(type: .sleep, timestamp: tSleepA, classification: .nap, force: true)
+        let sleepB = try service.recordEvent(type: .sleep, timestamp: tSleepB, classification: .nap, force: true)
+        let wakeC = try service.recordEvent(type: .wake, timestamp: tWakeC, force: true)
+
+        // Before filling the missing wake: only B -> C counts (1h) and A is incomplete
+        var metrics = try service.calculateDayMetrics(for: day, calendar: calendar)
+        XCTAssertEqual(metrics.sleepIntervals.count, 1)
+        XCTAssertEqual(metrics.completedNapsCount, 1)
+        XCTAssertEqual(metrics.totalDaytimeSleepDuration, 3600, accuracy: 1.0)
+        var incomplete = try service.fetchIncompleteEventReasons()
+        XCTAssertEqual(incomplete, [sleepA.id: .missingSubsequentWake(isLatestTimelineEvent: false)])
+
+        // Add the missing wake event chronologically between A and B
+        _ = try service.recordEvent(type: .wake, timestamp: tMissingWake, force: true)
+
+        // Now both A -> missingWake and B -> C are complete (2h total) and all warnings disappear
+        metrics = try service.calculateDayMetrics(for: day, calendar: calendar)
+        XCTAssertEqual(metrics.sleepIntervals.count, 2)
+        XCTAssertEqual(metrics.completedNapsCount, 2)
+        XCTAssertEqual(metrics.totalDaytimeSleepDuration, 7200, accuracy: 1.0)
+        XCTAssertEqual(metrics.sleepIntervals[0].startEvent.id, sleepA.id)
+        XCTAssertEqual(metrics.sleepIntervals[1].startEvent.id, sleepB.id)
+        XCTAssertEqual(metrics.sleepIntervals[1].endEvent?.id, wakeC.id)
+
+        incomplete = try service.fetchIncompleteEventReasons()
+        XCTAssertTrue(incomplete.isEmpty)
+    }
+
+    func testOvernightCompletedPairHasNoIncompleteWarningsAcrossDayBoundary() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Bogota")!
+
+        let nightSleep = calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 21, minute: 0))!
+        let morningWake = calendar.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 7, minute: 0))!
+
+        try service.recordEvent(type: .sleep, timestamp: nightSleep, classification: .nightSleep, force: true)
+        try service.recordEvent(type: .wake, timestamp: morningWake, force: true)
+
+        let incomplete = try service.fetchIncompleteEventReasons()
+        XCTAssertTrue(incomplete.isEmpty)
     }
 
     func testAwakeIntervalBetweenNaps() throws {

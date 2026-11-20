@@ -17,20 +17,16 @@ final class DuplicateHandlingTests: XCTestCase {
         try? FileManager.default.removeItem(at: tempDirectory)
     }
 
-    func testConsecutiveSleepThrowsError() throws {
+    func testConsecutiveSleepIsAllowedWithoutBlocking() throws {
         let now = Date()
-        try service.recordEvent(type: .sleep, timestamp: now)
+        let first = try service.recordEvent(type: .sleep, timestamp: now)
 
-        // Attempting to sleep again after 10 minutes should throw alreadySleeping
-        XCTAssertThrowsError(
-            try service.recordEvent(type: .sleep, timestamp: now.addingTimeInterval(600))
-        ) { error in
-            guard let sleepError = error as? SleepTrackingError,
-                  case .alreadySleeping = sleepError else {
-                XCTFail("Expected alreadySleeping error, got \(error)")
-                return
-            }
-        }
+        // Attempting to sleep again after 10 minutes should succeed without throwing
+        let second = try service.recordEvent(type: .sleep, timestamp: now.addingTimeInterval(600))
+
+        XCTAssertNotEqual(first.id, second.id)
+        let events = try database.fetchAllEvents()
+        XCTAssertEqual(events.count, 2)
     }
 
     func testRapidDebounceWithin5SecondsReturnsSameEvent() throws {
@@ -44,28 +40,24 @@ final class DuplicateHandlingTests: XCTestCase {
         XCTAssertEqual(events.count, 1)
     }
 
-    func testConsecutiveWakeThrowsError() throws {
+    func testConsecutiveWakeIsAllowedWithoutBlocking() throws {
         let now = Date()
         try service.recordEvent(type: .sleep, timestamp: now.addingTimeInterval(-3600))
-        try service.recordEvent(type: .wake, timestamp: now)
+        let firstWake = try service.recordEvent(type: .wake, timestamp: now)
 
-        // Attempting to wake again should throw alreadyAwake
-        XCTAssertThrowsError(
-            try service.recordEvent(type: .wake, timestamp: now.addingTimeInterval(300))
-        ) { error in
-            guard let sleepError = error as? SleepTrackingError,
-                  case .alreadyAwake = sleepError else {
-                XCTFail("Expected alreadyAwake error, got \(error)")
-                return
-            }
-        }
+        // Attempting to wake again should succeed without throwing
+        let secondWake = try service.recordEvent(type: .wake, timestamp: now.addingTimeInterval(300))
+
+        XCTAssertNotEqual(firstWake.id, secondWake.id)
+        let events = try database.fetchAllEvents()
+        XCTAssertEqual(events.count, 3)
     }
 
     func testForceRecordAllowsCorrection() throws {
         let now = Date()
         try service.recordEvent(type: .sleep, timestamp: now)
-        // With force = true, user can override/correct sequence
-        let forced = try service.recordEvent(type: .sleep, timestamp: now.addingTimeInterval(60), force: true)
+        // With force = true, user can override/correct sequence even within 5 seconds
+        let forced = try service.recordEvent(type: .sleep, timestamp: now.addingTimeInterval(2), force: true)
 
         let events = try database.fetchAllEvents()
         XCTAssertEqual(events.count, 2)

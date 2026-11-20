@@ -170,3 +170,54 @@ public enum TrackedInterval: Identifiable, Equatable, Sendable {
         }
     }
 }
+
+public enum SleepEventIncompleteReason: Equatable, Sendable {
+    /// A `Se durmió` event without a subsequent matching `Se despertó` event.
+    case missingSubsequentWake(isLatestTimelineEvent: Bool)
+    /// A `Se despertó` event without an immediately preceding valid `Se durmió` event.
+    case missingPrecedingSleep
+
+    public var isOngoing: Bool {
+        if case .missingSubsequentWake(let isLatest) = self {
+            return isLatest
+        }
+        return false
+    }
+
+    public var badgeTitle: String {
+        switch self {
+        case .missingSubsequentWake(let isLatestTimelineEvent):
+            return isLatestTimelineEvent ? "En curso" : "Incompleto"
+        case .missingPrecedingSleep:
+            return "Incompleto"
+        }
+    }
+
+    public var explanationMessage: String? {
+        switch self {
+        case .missingSubsequentWake(let isLatestTimelineEvent):
+            if isLatestTimelineEvent {
+                return nil
+            }
+            return "Evento incompleto: falta registrar el evento 'Se despertó' posterior para incluirlo en los bloques de sueño."
+        case .missingPrecedingSleep:
+            return "Evento incompleto: falta registrar el evento 'Se durmió' anterior para incluirlo en los bloques de sueño."
+        }
+    }
+}
+
+public struct SleepTimelineAnalysis: Equatable, Sendable {
+    public let sleepIntervals: [SleepInterval]
+    public let awakeIntervals: [AwakeInterval]
+    public let incompleteEventReasons: [UUID: SleepEventIncompleteReason]
+
+    public init(
+        sleepIntervals: [SleepInterval],
+        awakeIntervals: [AwakeInterval],
+        incompleteEventReasons: [UUID: SleepEventIncompleteReason]
+    ) {
+        self.sleepIntervals = sleepIntervals
+        self.awakeIntervals = awakeIntervals
+        self.incompleteEventReasons = incompleteEventReasons
+    }
+}

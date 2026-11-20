@@ -82,24 +82,13 @@ public final class SleepTrackingService: @unchecked Sendable {
         return try database.performTransaction {
             let latest = try database.fetchLatestEvent()
 
-            // State validation unless forced
-            if !force, let latest = latest {
-                // If attempting to record sleep while already sleeping
-                if type == .sleep && latest.type == .sleep {
-                    // Check if duplicate tap within 5 seconds
-                    if abs(timestamp.timeIntervalSince(latest.timestamp)) < 5 {
-                        return latest
-                    }
-                    throw SleepTrackingError.alreadySleeping(latest.timestamp)
-                }
-
-                // If attempting to record wake while already awake
-                if type == .wake && latest.type == .wake {
-                    if abs(timestamp.timeIntervalSince(latest.timestamp)) < 5 {
-                        return latest
-                    }
-                    throw SleepTrackingError.alreadyAwake(latest.timestamp)
-                }
+            // Prevent accidental rapid double-taps within 5 seconds unless forced,
+            // while allowing consecutive events of the same type without blocking.
+            if !force, let latest = latest,
+               (type == .sleep || type == .wake),
+               type == latest.type,
+               abs(timestamp.timeIntervalSince(latest.timestamp)) < 5 {
+                return latest
             }
 
             var finalClassification = classification
@@ -202,24 +191,16 @@ public final class SleepTrackingService: @unchecked Sendable {
     }
 
     public func getMostRecentInterval() throws -> TrackedInterval? {
-        let events = try database.fetchAllEvents(ascending: true)
-        let (sleepIntervals, awakeIntervals) = computeIntervals(from: events)
-
-        let lastSleep = sleepIntervals.last
-        let lastAwake = awakeIntervals.last
-
-        switch (lastSleep, lastAwake) {
-        case (.some(let sleep), .some(let awake)):
-            if sleep.startTime >= awake.startTime {
-                return .sleep(sleep)
-            } else {
-                return .awake(awake)
+        let state = try getCurrentState()
+        switch state {
+        case .sleeping(_, let event):
+            return .sleep(SleepInterval(startEvent: event, endEvent: nil))
+        case .awake(_, let event):
+            if let wakeEvent = event {
+                return .awake(AwakeInterval(wakeEvent: wakeEvent, nextSleepEvent: nil))
             }
-        case (.some(let sleep), .none):
-            return .sleep(sleep)
-        case (.none, .some(let awake)):
-            return .awake(awake)
-        case (.none, .none):
+            return nil
+        case .unknown:
             return nil
         }
     }
@@ -236,14 +217,29 @@ public final class SleepTrackingService: @unchecked Sendable {
         return try database.fetchEvents(from: startOfDay, to: endOfDay)
     }
 
+    public func fetchIncompleteEventReasons() throws -> [UUID: SleepEventIncompleteReason] {
+        let allEvents = try database.fetchAllEvents(ascending: true)
+        return analyzeTimeline(from: allEvents).incompleteEventReasons
+    }
+
     // MARK: - Interval and Metrics Calculation
 
-    /// Compute sleep intervals and awake intervals from ordered events.
-    /// Safely handles out-of-order, consecutive duplicates, or incomplete sequences.
-    public func computeIntervals(from events: [SleepEvent]) -> (sleepIntervals: [SleepInterval], awakeIntervals: [AwakeInterval]) {
-        let sorted = events.sorted { $0.timestamp < $1.timestamp }
+    /// Analyze chronological events into valid complete sleep blocks (`[Se durmió] -> [Se despertó]`),
+    /// awake intervals, and any incomplete/orphaned events excluded from sleep block calculations.
+    public func analyzeTimeline(from events: [SleepEvent]) -> SleepTimelineAnalysis {
+        let sorted = events.sorted { lhs, rhs in
+            if lhs.timestamp != rhs.timestamp {
+                return lhs.timestamp < rhs.timestamp
+            }
+            if lhs.createdAt != rhs.createdAt {
+                return lhs.createdAt < rhs.createdAt
+            }
+            return lhs.id.uuidString < rhs.id.uuidString
+        }
+
         var sleepIntervals: [SleepInterval] = []
         var awakeIntervals: [AwakeInterval] = []
+        var incompleteEventReasons: [UUID: SleepEventIncompleteReason] = [:]
 
         var activeSleepEvent: SleepEvent? = nil
         var lastWakeEvent: SleepEvent? = nil
@@ -251,9 +247,9 @@ public final class SleepTrackingService: @unchecked Sendable {
         for event in sorted {
             switch event.type {
             case .sleep:
-                if let active = activeSleepEvent {
-                    // Two consecutive sleep events: close previous as unclosed/orphan or keep latest
-                    sleepIntervals.append(SleepInterval(startEvent: active, endEvent: nil))
+                if let previousSleep = activeSleepEvent {
+                    // Consecutive sleep without an intervening wake: mark previous as incomplete and exclude it.
+                    incompleteEventReasons[previousSleep.id] = .missingSubsequentWake(isLatestTimelineEvent: false)
                 }
                 activeSleepEvent = event
 
@@ -266,8 +262,11 @@ public final class SleepTrackingService: @unchecked Sendable {
                 if let sleep = activeSleepEvent {
                     sleepIntervals.append(SleepInterval(startEvent: sleep, endEvent: event, classification: sleep.classification))
                     activeSleepEvent = nil
+                    lastWakeEvent = event
+                } else {
+                    // Orphan wake without a preceding valid sleep: ignore in sleep block calculation and flag as incomplete.
+                    incompleteEventReasons[event.id] = .missingPrecedingSleep
                 }
-                lastWakeEvent = event
 
             case .bedtimeRoutineStart, .sleepAttempt:
                 // Non-boundary metadata events
@@ -275,9 +274,9 @@ public final class SleepTrackingService: @unchecked Sendable {
             }
         }
 
-        // Check if Emanuel is still sleeping
-        if let active = activeSleepEvent {
-            sleepIntervals.append(SleepInterval(startEvent: active, endEvent: nil))
+        // Trailing sleep without a subsequent wake is excluded until completed.
+        if let remainingSleep = activeSleepEvent {
+            incompleteEventReasons[remainingSleep.id] = .missingSubsequentWake(isLatestTimelineEvent: true)
         }
 
         // Check active awake window
@@ -285,29 +284,38 @@ public final class SleepTrackingService: @unchecked Sendable {
             awakeIntervals.append(AwakeInterval(wakeEvent: wake, nextSleepEvent: nil))
         }
 
-        return (sleepIntervals, awakeIntervals)
+        return SleepTimelineAnalysis(
+            sleepIntervals: sleepIntervals,
+            awakeIntervals: awakeIntervals,
+            incompleteEventReasons: incompleteEventReasons
+        )
+    }
+
+    /// Compute valid completed sleep intervals and awake intervals from ordered events.
+    /// Safely handles out-of-order, consecutive duplicates, or incomplete sequences.
+    public func computeIntervals(from events: [SleepEvent]) -> (sleepIntervals: [SleepInterval], awakeIntervals: [AwakeInterval]) {
+        let analysis = analyzeTimeline(from: events)
+        return (analysis.sleepIntervals, analysis.awakeIntervals)
     }
 
     /// Calculate metrics for a 24-hour sleep day.
-    /// In pediatric sleep tracking, overnight sleep is assigned to the day it began,
-    /// or we attribute intervals intersecting the given date window.
+    /// Only complete valid `[Se durmió] -> [Se despertó]` pairs contribute to sleep blocks and durations.
     public func calculateDayMetrics(for targetDate: Date, calendar: Calendar = .current) throws -> DayMetrics {
         let startOfDay = calendar.startOfDay(for: targetDate)
         guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
             throw SleepTrackingError.invalidTimestamp("No se pudo calcular el rango del día.")
         }
 
-        // Fetch events with 1 day padding before and after to properly calculate overnight intervals
-        let windowStart = calendar.date(byAdding: .day, value: -1, to: startOfDay) ?? startOfDay
-        let windowEnd = calendar.date(byAdding: .day, value: 2, to: startOfDay) ?? endOfDay
+        // Fetch full timeline chronologically so cross-day pairing is always consistent
+        let allEvents = try database.fetchAllEvents(ascending: true)
+        let analysis = analyzeTimeline(from: allEvents)
+        let allSleeps = analysis.sleepIntervals
+        let allAwakes = analysis.awakeIntervals
 
-        let allEvents = try database.fetchEvents(from: windowStart, to: windowEnd)
-        let (allSleeps, allAwakes) = computeIntervals(from: allEvents)
-
-        // Find intervals that belong to or intersect targetDate
+        // Find completed sleep intervals that belong to or intersect targetDate
         let daySleeps = allSleeps.filter { interval in
+            guard let end = interval.endTime else { return false }
             let start = interval.startTime
-            let end = interval.endTime ?? Date()
             // Check intersection with startOfDay...endOfDay
             return start < endOfDay && end > startOfDay
         }
@@ -327,7 +335,7 @@ public final class SleepTrackingService: @unchecked Sendable {
         }?.timestamp
 
         // Night sleep onset: sleep event classified as nightSleep
-        let dayEvents = try database.fetchEvents(from: startOfDay, to: endOfDay)
+        let dayEvents = allEvents.filter { $0.timestamp >= startOfDay && $0.timestamp < endOfDay }
         let nightSleepOnset = dayEvents.first { $0.type == .sleep && $0.classification == .nightSleep }?.timestamp
 
         // Durations calculation (clipped to this day's boundary for precise day metrics)
@@ -337,8 +345,9 @@ public final class SleepTrackingService: @unchecked Sendable {
         var completedNapsCount = 0
 
         for interval in daySleeps {
+            guard let endTime = interval.endTime else { continue }
             let intervalStart = max(startOfDay, interval.startTime)
-            let intervalEnd = min(endOfDay, interval.endTime ?? Date())
+            let intervalEnd = min(endOfDay, endTime)
             let effectiveDuration = max(0, intervalEnd.timeIntervalSince(intervalStart))
 
             totalSleep += effectiveDuration
