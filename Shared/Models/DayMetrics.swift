@@ -2,6 +2,7 @@ import Foundation
 
 public struct DayMetrics: Equatable, Sendable {
     public let date: Date
+    public let cycleEnd: Date
     public let morningWakeTime: Date?
     public let sleepIntervals: [SleepInterval]
     public let awakeIntervals: [AwakeInterval]
@@ -11,8 +12,11 @@ public struct DayMetrics: Equatable, Sendable {
     public let totalSleepDuration: TimeInterval
     public let nightSleepOnset: Date?
 
+    public var cycleStart: Date { date }
+
     public init(
         date: Date,
+        cycleEnd: Date? = nil,
         morningWakeTime: Date?,
         sleepIntervals: [SleepInterval],
         awakeIntervals: [AwakeInterval],
@@ -23,6 +27,7 @@ public struct DayMetrics: Equatable, Sendable {
         nightSleepOnset: Date?
     ) {
         self.date = date
+        self.cycleEnd = cycleEnd ?? date.addingTimeInterval(24 * 3600)
         self.morningWakeTime = morningWakeTime
         self.sleepIntervals = sleepIntervals
         self.awakeIntervals = awakeIntervals

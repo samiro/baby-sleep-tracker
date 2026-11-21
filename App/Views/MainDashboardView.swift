@@ -39,16 +39,11 @@ public struct MainDashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    // Header greeting & baby name
-                    VStack(spacing: 4) {
-                        Text(currentBabyName)
-                            .font(.system(size: 17, weight: .bold, design: .rounded))
-                            .foregroundStyle(.secondary)
-                        Text(isSleeping ? "Durmiendo plácidamente" : "Despierto y activo")
-                            .font(.system(size: 26, weight: .heavy, design: .rounded))
-                            .foregroundColor(.primary)
-                    }
-                    .padding(.top, 12)
+                    // Current sleep status header
+                    Text(isSleeping ? "Durmiendo plácidamente" : "Despierto y activo")
+                        .font(.system(size: 26, weight: .heavy, design: .rounded))
+                        .foregroundColor(.primary)
+                        .padding(.top, 12)
 
                     // Big Current State Card with Live Timer
                     VStack(spacing: 16) {
