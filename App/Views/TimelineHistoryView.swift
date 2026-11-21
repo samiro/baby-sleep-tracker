@@ -1,14 +1,18 @@
 import SwiftUI
 
 public struct TimelineHistoryView: View {
-    @State private var selectedDate: Date = Date()
+    @State private var cycleOffset: Int = 0
+    @State private var activeConfig: SleepScheduleConfiguration = SleepConfigurationManager.shared.configuration
     @State private var events: [SleepEvent] = []
     @State private var incompleteEventReasons: [UUID: SleepEventIncompleteReason] = [:]
     @State private var metrics: DayMetrics?
+    @State private var activeOngoingInterval: SleepInterval?
     @State private var editingEvent: SleepEvent?
     @State private var isAddingEvent = false
     @State private var eventToDelete: SleepEvent?
     @State private var showDeleteConfirmation = false
+    @State private var selectedCrossCycleInfo: CrossCycleIntervalInfo?
+    @State private var showCrossCycleAlert = false
     @State private var showExportSheet = false
     @State private var csvExportString: String = ""
     @State private var jsonExportData: Data = Data()
@@ -20,10 +24,57 @@ public struct TimelineHistoryView: View {
         return f
     }
 
-    private var dateFormatter: DateFormatter {
+    private var shortDayFormatter: DateFormatter {
         let f = DateFormatter()
-        f.dateStyle = .medium
+        f.locale = Locale(identifier: "es_ES")
+        f.dateFormat = "d MMM"
         return f
+    }
+
+    private enum EventTimelineRow: Identifiable {
+        case daySeparator(Date, isFirst: Bool)
+        case event(SleepEvent)
+
+        var id: String {
+            switch self {
+            case .daySeparator(let day, _):
+                return "day-\(Int(day.timeIntervalSince1970))"
+            case .event(let event):
+                return event.id.uuidString
+            }
+        }
+    }
+
+    private var eventTimelineRows: [EventTimelineRow] {
+        guard !events.isEmpty else { return [] }
+        let calendar = Calendar.current
+        let distinctDays = Set(events.map { calendar.startOfDay(for: $0.timestamp) })
+        let spansMultipleDays = distinctDays.count > 1
+
+        var rows: [EventTimelineRow] = []
+        var lastDay: Date? = nil
+        for event in events {
+            let eventDay = calendar.startOfDay(for: event.timestamp)
+            if spansMultipleDays, lastDay != eventDay {
+                rows.append(.daySeparator(eventDay, isFirst: lastDay == nil))
+                lastDay = eventDay
+            }
+            rows.append(.event(event))
+        }
+        return rows
+    }
+
+    private var displayedCycle: SleepCycleRange {
+        activeConfig.cycleRange(offset: cycleOffset)
+    }
+
+    private var initialDateForNewEvent: Date {
+        let now = Date()
+        if cycleOffset == 0 {
+            return now
+        }
+        let shifted = Calendar.current.date(byAdding: .day, value: cycleOffset, to: now) ?? displayedCycle.start
+        return SleepEvent.clampedInitialTimestamp(shifted, now: now)
     }
 
     public init() {}
@@ -32,12 +83,12 @@ public struct TimelineHistoryView: View {
         NavigationStack {
             List {
                 Group {
-                    // Date Navigation Bar
-                    dateNavigationBar
+                    // Cycle Navigation Bar
+                    cycleNavigationBar
 
-                    // Day Metrics Summary
+                    // Cycle Metrics Summary
                     if let metrics = metrics {
-                        DailyMetricsCardView(metrics: metrics)
+                        DailyMetricsCardView(metrics: metrics, title: "Resumen del ciclo")
                     }
 
                     // Sleep Intervals Section
@@ -50,7 +101,7 @@ public struct TimelineHistoryView: View {
                 // Raw Events Timeline Section
                 Section {
                     if events.isEmpty {
-                        Text("Sin eventos en este día.")
+                        Text("Sin eventos en este ciclo.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .center)
@@ -61,22 +112,30 @@ public struct TimelineHistoryView: View {
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
                     } else {
-                        ForEach(events) { event in
-                            Button {
-                                editingEvent = event
-                            } label: {
-                                eventRow(for: event)
-                            }
-                            .buttonStyle(.plain)
-                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button(role: .destructive) {
-                                    eventToDelete = event
-                                    showDeleteConfirmation = true
+                        ForEach(eventTimelineRows) { row in
+                            switch row {
+                            case .daySeparator(let day, let isFirst):
+                                daySeparatorRow(for: day)
+                                    .listRowInsets(EdgeInsets(top: isFirst ? 2 : 10, leading: 20, bottom: 2, trailing: 16))
+                                    .listRowSeparator(.hidden)
+                                    .listRowBackground(Color.clear)
+                            case .event(let event):
+                                Button {
+                                    editingEvent = event
                                 } label: {
-                                    Label("Eliminar", systemImage: "trash")
+                                    eventRow(for: event)
+                                }
+                                .buttonStyle(.plain)
+                                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        eventToDelete = event
+                                        showDeleteConfirmation = true
+                                    } label: {
+                                        Label("Eliminar", systemImage: "trash")
+                                    }
                                 }
                             }
                         }
@@ -92,6 +151,7 @@ public struct TimelineHistoryView: View {
                 .listRowBackground(Color.clear)
             }
             .listStyle(.plain)
+            .environment(\.defaultMinListRowHeight, 10)
             .navigationTitle("Historial")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -124,7 +184,7 @@ public struct TimelineHistoryView: View {
             }
             .sheet(isPresented: $isAddingEvent) {
                 AddEditEventView(
-                    initialDate: selectedDate,
+                    initialDate: initialDateForNewEvent,
                     onSave: { newEvent in
                         try? SleepTrackingService.shared.recordEvent(
                             type: newEvent.type,
@@ -165,6 +225,11 @@ public struct TimelineHistoryView: View {
             } message: {
                 Text("Esta acción eliminará el evento seleccionado de forma irreversible.")
             }
+            .alert("Intervalo entre ciclos", isPresented: $showCrossCycleAlert, presenting: selectedCrossCycleInfo) { _ in
+                Button("Entendido", role: .cancel) {}
+            } message: { info in
+                Text(info.detailMessage())
+            }
             .sheet(isPresented: $isSharePresented) {
                 ShareSheet(items: shareItems)
             }
@@ -182,10 +247,11 @@ public struct TimelineHistoryView: View {
 
     // MARK: - Components
 
-    private var dateNavigationBar: some View {
-        HStack {
+    private var cycleNavigationBar: some View {
+        let cycle = displayedCycle
+        return HStack {
             Button {
-                changeDay(by: -1)
+                changeCycle(by: -1)
             } label: {
                 Image(systemName: "chevron.left")
                     .padding(8)
@@ -193,86 +259,69 @@ public struct TimelineHistoryView: View {
                     .clipShape(Circle())
             }
             .buttonStyle(.borderless)
-            .accessibilityLabel("Día anterior")
+            .accessibilityLabel("Ciclo anterior")
 
             Spacer()
 
             VStack(spacing: 2) {
-                Text(isToday(selectedDate) ? "Hoy" : (isYesterday(selectedDate) ? "Ayer" : dateFormatter.string(from: selectedDate)))
+                Text(cycle.navigationTitle(forOffset: cycleOffset))
                     .font(.headline)
-                if isToday(selectedDate) || isYesterday(selectedDate) {
-                    Text(dateFormatter.string(from: selectedDate))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+                Text(cycle.navigationSubtitle(forOffset: cycleOffset))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
 
             Spacer()
 
             Button {
-                changeDay(by: 1)
+                changeCycle(by: 1)
             } label: {
                 Image(systemName: "chevron.right")
                     .padding(8)
                     .background(Color(.secondarySystemBackground))
                     .clipShape(Circle())
+                    .opacity(canNavigateToNextCycle ? 1.0 : 0.35)
             }
             .buttonStyle(.borderless)
-            .accessibilityLabel("Día siguiente")
+            .disabled(!canNavigateToNextCycle)
+            .accessibilityLabel("Ciclo siguiente")
         }
         .buttonStyle(.borderless)
         .padding(.vertical, 4)
     }
 
+    private var displayedSleepIntervals: [SleepInterval] {
+        var result = metrics?.sleepIntervals ?? []
+        if let ongoing = activeOngoingInterval,
+           !result.contains(where: { $0.id == ongoing.id }) {
+            result.append(ongoing)
+        }
+        return result.sorted { $0.startTime < $1.startTime }
+    }
+
     private var intervalsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let intervals = displayedSleepIntervals
+        return VStack(alignment: .leading, spacing: 10) {
             Text("Intervalos de sueño")
                 .font(.headline)
 
-            if let intervals = metrics?.sleepIntervals, !intervals.isEmpty {
+            if !intervals.isEmpty {
                 ForEach(intervals) { interval in
-                    HStack(spacing: 12) {
-                        Image(systemName: interval.classification == .nap ? "sun.haze.fill" : "moon.stars.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(interval.classification == .nap ? .orange : .indigo)
-                            .frame(width: 36, height: 36)
-                            .background((interval.classification == .nap ? Color.orange : Color.indigo).opacity(0.15))
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                        VStack(alignment: .leading, spacing: 3) {
-                            HStack {
-                                Text(interval.classification.displayName)
-                                    .font(.subheadline)
-                                    .fontWeight(.bold)
-                                if !interval.isCompleted {
-                                    Text("En curso")
-                                        .font(.caption2)
-                                        .bold()
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background(Color.green.opacity(0.2))
-                                        .foregroundColor(.green)
-                                        .clipShape(Capsule())
-                                }
-                            }
-                            Text(interval.summaryText)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                    let crossCycleInfo = activeConfig.crossCycleInfo(for: interval)
+                    if let crossCycleInfo = crossCycleInfo {
+                        Button {
+                            selectedCrossCycleInfo = crossCycleInfo
+                            showCrossCycleAlert = true
+                        } label: {
+                            intervalCard(for: interval, spansCycles: true)
                         }
-
-                        Spacer()
-
-                        Text(interval.formattedDuration)
-                            .font(.subheadline)
-                            .fontWeight(.heavy)
-                            .monospacedDigit()
+                        .buttonStyle(.plain)
+                    } else {
+                        intervalCard(for: interval, spansCycles: false)
                     }
-                    .padding()
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
             } else {
-                Text("No hay intervalos registrados en este día.")
+                Text("No hay intervalos registrados en este ciclo.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -281,6 +330,85 @@ public struct TimelineHistoryView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             }
         }
+    }
+
+    private func intervalCard(for interval: SleepInterval, spansCycles: Bool) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: interval.classification == .nap ? "sun.haze.fill" : "moon.stars.fill")
+                .font(.system(size: 20))
+                .foregroundColor(interval.classification == .nap ? .orange : .indigo)
+                .frame(width: 36, height: 36)
+                .background((interval.classification == .nap ? Color.orange : Color.indigo).opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(interval.classification.displayName)
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                    if !interval.isCompleted {
+                        Text("En curso")
+                            .font(.caption2)
+                            .bold()
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.green.opacity(0.2))
+                            .foregroundColor(.green)
+                            .clipShape(Capsule())
+                    }
+                }
+
+                if spansCycles {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.left.arrow.right")
+                            .font(.system(size: 9, weight: .bold))
+                        Text("Cruza ciclos")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Color.orange.opacity(0.18))
+                    .foregroundColor(.orange)
+                    .clipShape(Capsule())
+                }
+
+                Text(interval.rangeText(includeDate: spansCycles))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Text(interval.formattedDuration)
+                .font(.subheadline)
+                .fontWeight(.heavy)
+                .monospacedDigit()
+        }
+        .padding()
+        .background(
+            ZStack {
+                Color(.secondarySystemBackground)
+                if spansCycles {
+                    Color.orange.opacity(0.05)
+                }
+            }
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(spansCycles ? Color.orange.opacity(0.55) : Color.clear, lineWidth: 1.2)
+        )
+    }
+
+    private func daySeparatorRow(for day: Date) -> some View {
+        Text(shortDayFormatter.string(from: day))
+            .font(.caption)
+            .fontWeight(.medium)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func eventRow(for event: SleepEvent) -> some View {
@@ -303,7 +431,8 @@ public struct TimelineHistoryView: View {
                             .font(.subheadline)
                             .fontWeight(.semibold)
                         if event.type == .sleep {
-                            Text("(\(event.classification.displayName))")
+                            let dynamicClassification = activeConfig.classify(timestamp: event.timestamp)
+                            Text("(\(dynamicClassification.displayName))")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -373,27 +502,29 @@ public struct TimelineHistoryView: View {
 
     // MARK: - Actions
 
-    private func changeDay(by offset: Int) {
-        if let newDate = Calendar.current.date(byAdding: .day, value: offset, to: selectedDate) {
-            selectedDate = newDate
-            reloadData()
-        }
+    private var canNavigateToNextCycle: Bool {
+        cycleOffset < 0
     }
 
-    private func isToday(_ date: Date) -> Bool {
-        Calendar.current.isDateInToday(date)
-    }
-
-    private func isYesterday(_ date: Date) -> Bool {
-        Calendar.current.isDateInYesterday(date)
+    private func changeCycle(by offset: Int) {
+        let nextOffset = min(0, cycleOffset + offset)
+        guard nextOffset != cycleOffset else { return }
+        cycleOffset = nextOffset
+        reloadData()
     }
 
     private func reloadData() {
+        let config = SleepConfigurationManager.shared.configuration
+        activeConfig = config
+        let cycle = config.cycleRange(offset: cycleOffset)
         let service = SleepTrackingService.shared
-        let dayEvents = (try? service.fetchEvents(for: selectedDate)) ?? []
-        events = dayEvents.filter { $0.type != .bedtimeRoutineStart }
+        let cycleEvents = (try? service.fetchEvents(in: cycle)) ?? []
+        events = cycleEvents.filter { $0.type != .bedtimeRoutineStart }
         incompleteEventReasons = (try? service.fetchIncompleteEventReasons()) ?? [:]
-        metrics = try? service.calculateDayMetrics(for: selectedDate)
+        metrics = try? service.calculateCycleMetrics(for: cycle, configuration: config)
+        activeOngoingInterval = cycleOffset == 0
+            ? (try? service.activeSleepInterval(in: cycle, configuration: config))
+            : nil
     }
 
     private func colorForEvent(_ type: EventType) -> Color {

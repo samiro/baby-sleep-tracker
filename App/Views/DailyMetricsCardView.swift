@@ -2,6 +2,7 @@ import SwiftUI
 
 public struct DailyMetricsCardView: View {
     let metrics: DayMetrics
+    let title: String
 
     private var timeFormatter: DateFormatter {
         let f = DateFormatter()
@@ -9,13 +10,14 @@ public struct DailyMetricsCardView: View {
         return f
     }
 
-    public init(metrics: DayMetrics) {
+    public init(metrics: DayMetrics, title: String = "Resumen") {
         self.metrics = metrics
+        self.title = title
     }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Resumen del día")
+            Text(title)
                 .font(.headline)
                 .foregroundStyle(.primary)
 

@@ -14,13 +14,13 @@ public struct SettingsView: View {
     // Configuration state
     @State private var nightStartDate: Date = Date()
     @State private var dayStartDate: Date = Date()
+    @State private var savedConfig: SleepScheduleConfiguration = SleepConfigurationManager.shared.configuration
 
     // Active handle selection for direct tapping or stepping
     @State private var activeHandle: DragHandle = .dayStart
 
     // Feedback & alerts
-    @State private var showReclassifyAlert = false
-    @State private var reclassifyCount: Int = 0
+    @State private var showSaveScheduleConfirmation = false
     @State private var alertMessage: String = ""
     @State private var showAlert = false
     @State private var showResetConfirmation = false
@@ -63,6 +63,10 @@ public struct SettingsView: View {
         )
     }
 
+    private var hasUnsavedScheduleChanges: Bool {
+        currentConfig != savedConfig
+    }
+
     public var body: some View {
         NavigationStack {
             Form {
@@ -101,36 +105,30 @@ public struct SettingsView: View {
                     }
                     .padding(.vertical, 4)
                 } header: {
-                    Label("Nombre en Homescreen", systemImage: "person.crop.circle")
+                    Label("Nombre del bebé", systemImage: "person.crop.circle")
                 } footer: {
-                    Text("Este nombre se mostrará en el encabezado y barra de navegación de la pantalla principal.")
+                    Text("Este nombre se mostrará en el encabezado de la pantalla principal.")
                         .font(.caption)
                 }
 
                 // Section 1: Interactive 24-Hour Cycle Bar
                 Section {
                     scheduleVisualCard
-                } header: {
-                    Label("Ciclo de 24 Horas Interactivo", systemImage: "clock.arrow.circlepath")
-                } footer: {
-                    Text("Arrastra el indicador de la barra para fijar la hora en que finaliza la noche e inicia el día (ej. 06:30), o la hora en que inicia la noche (ej. 19:30).")
-                        .font(.caption)
-                }
-
-                // Section 2: Data Actions & Maintenance
-                Section(header: Label("Mantenimiento de datos", systemImage: "wrench.and.screwdriver")) {
-                    Button {
-                        reclassifyPastEvents()
-                    } label: {
-                        Label("Aplicar a eventos pasados sin clasificar", systemImage: "arrow.triangle.2.circlepath")
-                    }
 
                     Button {
                         showResetConfirmation = true
                     } label: {
                         Label("Restablecer ciclo 24h recomendado", systemImage: "arrow.counterclockwise")
                     }
+                } header: {
+                    Label("Ciclo de 24 Horas Interactivo", systemImage: "clock.arrow.circlepath")
+                } footer: {
+                    Text("Arrastra el indicador de la barra para ajustar el inicio del día (ej. 06:30) y la noche (ej. 19:30), y pulsa «Guardar cambios» para aplicar el nuevo horario o «Cancelar» para descartarlo.")
+                        .font(.caption)
+                }
 
+                // Section 2: Data Actions & Maintenance
+                Section(header: Label("Mantenimiento de datos", systemImage: "wrench.and.screwdriver")) {
                     Button(role: .destructive) {
                         showClearDataConfirmation = true
                     } label: {
@@ -190,6 +188,14 @@ public struct SettingsView: View {
             } message: {
                 Text("Se restablecerá el nombre por defecto (\(BabyProfileManager.defaultAppName)).")
             }
+            .alert("¿Actualizar ciclo de 24 horas?", isPresented: $showSaveScheduleConfirmation) {
+                Button("Cancelar", role: .cancel) {}
+                Button("Guardar y recalcular") {
+                    applyScheduleChange(currentConfig)
+                }
+            } message: {
+                Text("Modificar este horario (\(currentConfig.nightStartTimeString) – \(currentConfig.dayStartTimeString)) recalculará y reorganizará las estadísticas, intervalos y registros de todo el historial, tanto del ciclo actual como de los anteriores.")
+            }
             .alert("Información", isPresented: $showAlert) {
                 Button("Aceptar", role: .cancel) {}
             } message: {
@@ -205,7 +211,7 @@ public struct SettingsView: View {
                 }
                 Button("Cancelar", role: .cancel) {}
             } message: {
-                Text("Se restaurará el horario recomendado de 24 horas (19:00 a 07:00).")
+                Text("Se restaurará el horario recomendado de 24 horas (19:00 a 07:00) y se recalcularán las estadísticas y datos de todo el historial registrado.")
             }
             .confirmationDialog(
                 "¿Eliminar todos los registros?",
@@ -329,28 +335,73 @@ public struct SettingsView: View {
             )
             .padding(.top, 4)
             .padding(.bottom, 2)
+
+            // Explicit Save / Cancel Actions
+            HStack(spacing: 10) {
+                if hasUnsavedScheduleChanges {
+                    Button {
+                        discardUnsavedChanges()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "xmark.circle")
+                            Text("Cancelar")
+                                .fontWeight(.semibold)
+                        }
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .foregroundColor(.primary)
+                        .background(Color(.tertiarySystemFill))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Button {
+                    showSaveScheduleConfirmation = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle.fill")
+                        Text(hasUnsavedScheduleChanges ? "Guardar cambios" : "Guardar cambios del ciclo")
+                            .fontWeight(.semibold)
+                    }
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .foregroundColor(hasUnsavedScheduleChanges ? .white : .secondary)
+                    .background(hasUnsavedScheduleChanges ? Color.accentColor : Color(.tertiarySystemFill))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(!hasUnsavedScheduleChanges)
+            }
         }
         .padding(.vertical, 6)
     }
 
     // MARK: - Logic & Actions
 
+    private func discardUnsavedChanges() {
+        nightStartDate = makeDate(hour: savedConfig.nightStartHour, minute: savedConfig.nightStartMinute)
+        dayStartDate = makeDate(hour: savedConfig.dayStartHour, minute: savedConfig.dayStartMinute)
+        triggerHaptic()
+    }
+
     private func updateDayTime(minutes: Int) {
         let hour = (minutes / 60) % 24
         let minute = minutes % 60
         dayStartDate = makeDate(hour: hour, minute: minute)
-        saveConfig()
     }
 
     private func updateNightTime(minutes: Int) {
         let hour = (minutes / 60) % 24
         let minute = minutes % 60
         nightStartDate = makeDate(hour: hour, minute: minute)
-        saveConfig()
     }
 
     private func loadInitialConfig() {
         let config = SleepConfigurationManager.shared.configuration
+        savedConfig = config
         nightStartDate = makeDate(hour: config.nightStartHour, minute: config.nightStartMinute)
         dayStartDate = makeDate(hour: config.dayStartHour, minute: config.dayStartMinute)
     }
@@ -363,35 +414,27 @@ public struct SettingsView: View {
         return Calendar.current.date(from: components) ?? Date()
     }
 
-    private func saveConfig() {
-        let config = currentConfig
-        SleepConfigurationManager.shared.save(config)
+    private func applyScheduleChange(_ newConfig: SleepScheduleConfiguration) {
+        do {
+            try SleepTrackingService.shared.applyScheduleConfiguration(newConfig)
+            savedConfig = newConfig
+            nightStartDate = makeDate(hour: newConfig.nightStartHour, minute: newConfig.nightStartMinute)
+            dayStartDate = makeDate(hour: newConfig.dayStartHour, minute: newConfig.dayStartMinute)
+            triggerHaptic()
+        } catch {
+            alertMessage = "Error al actualizar el ciclo de 24 horas: \(error.localizedDescription)"
+            showAlert = true
+        }
     }
 
     private func resetToDefaults() {
-        SleepConfigurationManager.shared.resetToDefaults()
-        loadInitialConfig()
+        applyScheduleChange(SleepScheduleConfiguration.standard)
     }
 
     private func triggerHaptic() {
         #if canImport(UIKit)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         #endif
-    }
-
-    private func reclassifyPastEvents() {
-        do {
-            let updated = try SleepTrackingService.shared.reclassifyUnspecifiedEvents()
-            if updated > 0 {
-                alertMessage = "Se han reclasificado exitosamente \(updated) evento(s) previo(s) según los horarios actuales."
-            } else {
-                alertMessage = "No se encontraron eventos sin clasificar pendientes de actualizar."
-            }
-            showAlert = true
-        } catch {
-            alertMessage = "Error al reclasificar eventos: \(error.localizedDescription)"
-            showAlert = true
-        }
     }
 
     private func clearAllData() {
@@ -440,7 +483,7 @@ public struct EditBabyNameSheet: View {
                 } header: {
                     Text("Nombre del bebé")
                 } footer: {
-                    Text("Este nombre se mostrará en el encabezado y barra de navegación de la pantalla principal.")
+                    Text("Este nombre se mostrará en el encabezado de la pantalla principal.")
                         .font(.caption)
                 }
             }

@@ -85,26 +85,86 @@ final class SleepIntervalTests: XCTestCase {
         XCTAssertNil(analysis.incompleteEventReasons[wakeC.id])
     }
 
-    func testOrphanWakeEventsAreIgnoredAndFlaggedAsIncomplete() throws {
+    func testLeadingWakeStartsValidAwakeIntervalAndOnlyConsecutiveWakesAreFlaggedIncomplete() throws {
         let t0 = Date().addingTimeInterval(-10800)
-        let orphanWakeFirst = SleepEvent(type: .wake, timestamp: t0)
+        let leadingWake = SleepEvent(type: .wake, timestamp: t0)
         let sleep1 = SleepEvent(type: .sleep, timestamp: t0.addingTimeInterval(1800), classification: .nap)
         let wake1 = SleepEvent(type: .wake, timestamp: t0.addingTimeInterval(5400))
-        let orphanWakeDuplicate = SleepEvent(type: .wake, timestamp: t0.addingTimeInterval(7200))
+        let duplicateWake = SleepEvent(type: .wake, timestamp: t0.addingTimeInterval(7200))
 
-        let analysis = service.analyzeTimeline(from: [orphanWakeFirst, sleep1, wake1, orphanWakeDuplicate])
+        let analysis = service.analyzeTimeline(from: [leadingWake, sleep1, wake1, duplicateWake])
 
         XCTAssertEqual(analysis.sleepIntervals.count, 1)
         XCTAssertEqual(analysis.sleepIntervals[0].startEvent.id, sleep1.id)
         XCTAssertEqual(analysis.sleepIntervals[0].endEvent?.id, wake1.id)
         XCTAssertEqual(analysis.sleepIntervals[0].duration, 3600, accuracy: 0.1)
 
-        XCTAssertEqual(analysis.incompleteEventReasons.count, 2)
-        XCTAssertEqual(analysis.incompleteEventReasons[orphanWakeFirst.id], .missingPrecedingSleep)
-        XCTAssertEqual(analysis.incompleteEventReasons[orphanWakeDuplicate.id], .missingPrecedingSleep)
+        // Leading wake -> sleep1 forms a valid completed awake interval (30 min)
+        XCTAssertEqual(analysis.awakeIntervals.count, 2)
+        XCTAssertEqual(analysis.awakeIntervals[0].wakeEvent.id, leadingWake.id)
+        XCTAssertEqual(analysis.awakeIntervals[0].nextSleepEvent?.id, sleep1.id)
+        XCTAssertEqual(analysis.awakeIntervals[0].duration, 1800, accuracy: 0.1)
+
+        // Leading wake is NOT incomplete; only the consecutive duplicate wake is flagged
+        XCTAssertEqual(analysis.incompleteEventReasons.count, 1)
+        XCTAssertNil(analysis.incompleteEventReasons[leadingWake.id])
+        XCTAssertEqual(analysis.incompleteEventReasons[duplicateWake.id], .missingPrecedingSleep)
         XCTAssertEqual(
-            analysis.incompleteEventReasons[orphanWakeFirst.id]?.explanationMessage,
+            analysis.incompleteEventReasons[duplicateWake.id]?.explanationMessage,
             "Evento incompleto: falta registrar el evento 'Se durmió' anterior para incluirlo en los bloques de sueño."
+        )
+    }
+
+    func testCycleStartingWithWakeThenSleepIsValidWhileCrossCycleConsecutiveEventsStayFlagged() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Bogota")!
+
+        // Nov 17 19:07 wake -> Nov 18 11:07 sleep (16h awake) -> Nov 18 12:30 wake (1h 23m sleep)
+        let wakeNov17 = SleepEvent(
+            type: .wake,
+            timestamp: calendar.date(from: DateComponents(year: 2026, month: 11, day: 17, hour: 19, minute: 7))!
+        )
+        let sleepNov18 = SleepEvent(
+            type: .sleep,
+            timestamp: calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 11, minute: 7))!,
+            classification: .nap
+        )
+        let wakeNov18 = SleepEvent(
+            type: .wake,
+            timestamp: calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 12, minute: 30))!
+        )
+
+        let validAnalysis = service.analyzeTimeline(from: [wakeNov17, sleepNov18, wakeNov18])
+        XCTAssertTrue(validAnalysis.incompleteEventReasons.isEmpty)
+        XCTAssertEqual(validAnalysis.awakeIntervals.first?.wakeEvent.id, wakeNov17.id)
+        XCTAssertEqual(validAnalysis.awakeIntervals.first?.nextSleepEvent?.id, sleepNov18.id)
+        XCTAssertEqual(validAnalysis.awakeIntervals.first?.duration ?? 0, 16 * 3600, accuracy: 1.0)
+        XCTAssertEqual(validAnalysis.sleepIntervals.count, 1)
+
+        // Consecutive wakes across a cycle boundary (Nov 18 12:30 wake -> Nov 18 20:00 wake) MUST still be flagged
+        let consecutiveWakeNextCycle = SleepEvent(
+            type: .wake,
+            timestamp: calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 20, minute: 0))!
+        )
+        let crossCycleWakeAnalysis = service.analyzeTimeline(from: [wakeNov17, sleepNov18, wakeNov18, consecutiveWakeNextCycle])
+        XCTAssertEqual(crossCycleWakeAnalysis.incompleteEventReasons[consecutiveWakeNextCycle.id], .missingPrecedingSleep)
+        XCTAssertNil(crossCycleWakeAnalysis.incompleteEventReasons[wakeNov17.id])
+
+        // Consecutive sleeps across a cycle boundary MUST still flag the earlier sleep
+        let sleepCycle1 = SleepEvent(
+            type: .sleep,
+            timestamp: calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 18, minute: 0))!,
+            classification: .nap
+        )
+        let sleepCycle2 = SleepEvent(
+            type: .sleep,
+            timestamp: calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 21, minute: 0))!,
+            classification: .nightSleep
+        )
+        let crossCycleSleepAnalysis = service.analyzeTimeline(from: [sleepCycle1, sleepCycle2])
+        XCTAssertEqual(
+            crossCycleSleepAnalysis.incompleteEventReasons[sleepCycle1.id],
+            .missingSubsequentWake(isLatestTimelineEvent: false)
         )
     }
 

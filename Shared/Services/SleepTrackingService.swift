@@ -55,8 +55,13 @@ public final class SleepTrackingService: @unchecked Sendable {
     public static let shared = SleepTrackingService()
 
     private let database: SQLiteDatabase
+    private let configurationManager: SleepConfigurationManager
 
-    public init(database: SQLiteDatabase? = nil) {
+    public init(
+        database: SQLiteDatabase? = nil,
+        configurationManager: SleepConfigurationManager = .shared
+    ) {
+        self.configurationManager = configurationManager
         if let database = database {
             self.database = database
         } else {
@@ -94,7 +99,7 @@ public final class SleepTrackingService: @unchecked Sendable {
             var finalClassification = classification
             if finalClassification == .unspecified && type == .sleep {
                 // Classify daytime vs night sleep based on configured schedule
-                finalClassification = SleepConfigurationManager.shared.configuration.classify(timestamp: timestamp)
+                finalClassification = configurationManager.configuration.classify(timestamp: timestamp)
             }
 
             let newEvent = SleepEvent(
@@ -134,7 +139,51 @@ public final class SleepTrackingService: @unchecked Sendable {
 
     @discardableResult
     public func reclassifyUnspecifiedEvents() throws -> Int {
-        return try SleepConfigurationManager.shared.reclassifyUnspecifiedEvents(database: database)
+        return try configurationManager.reclassifyUnspecifiedEvents(database: database)
+    }
+
+    /// Saves a new 24-hour cycle schedule configuration and retroactively reclassifies
+    /// all historical sleep events so past and current cycles stay consistent.
+    @discardableResult
+    public func applyScheduleConfiguration(
+        _ newConfig: SleepScheduleConfiguration,
+        calendar: Calendar = .current
+    ) throws -> Int {
+        let updatedCount = try reclassifyAllSleepEvents(using: newConfig, calendar: calendar, notify: false)
+        configurationManager.save(newConfig)
+        notifyDataChanged()
+        return updatedCount
+    }
+
+    /// Retroactively reclassifies every sleep event in storage according to `configuration`
+    /// (or the currently saved configuration when omitted).
+    @discardableResult
+    public func reclassifyAllSleepEvents(
+        using configuration: SleepScheduleConfiguration? = nil,
+        calendar: Calendar = .current,
+        notify: Bool = true
+    ) throws -> Int {
+        let activeConfig = configuration ?? configurationManager.configuration
+        return try database.performTransaction {
+            let allEvents = try database.fetchAllEvents(ascending: true)
+            var updatedCount = 0
+
+            for event in allEvents where event.type == .sleep {
+                let newClassification = activeConfig.classify(timestamp: event.timestamp, calendar: calendar)
+                if event.classification != newClassification {
+                    var updatedEvent = event
+                    updatedEvent.classification = newClassification
+                    updatedEvent.updatedAt = Date()
+                    try database.updateEvent(updatedEvent)
+                    updatedCount += 1
+                }
+            }
+
+            if notify {
+                notifyDataChanged()
+            }
+            return updatedCount
+        }
     }
 
     public func resetAllData() throws {
@@ -209,12 +258,19 @@ public final class SleepTrackingService: @unchecked Sendable {
         return try database.fetchAllEvents(ascending: ascending)
     }
 
-    public func fetchEvents(for date: Date, calendar: Calendar = .current) throws -> [SleepEvent] {
-        let startOfDay = calendar.startOfDay(for: date)
-        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
-            return []
-        }
-        return try database.fetchEvents(from: startOfDay, to: endOfDay)
+    public func fetchEvents(in cycle: SleepCycleRange) throws -> [SleepEvent] {
+        let events = try database.fetchEvents(from: cycle.start, to: cycle.end)
+        return events.filter { cycle.contains($0.timestamp) }
+    }
+
+    public func fetchEvents(
+        for date: Date,
+        calendar: Calendar = .current,
+        configuration: SleepScheduleConfiguration? = nil
+    ) throws -> [SleepEvent] {
+        let activeConfig = configuration ?? configurationManager.configuration
+        let cycle = activeConfig.cycleRange(containing: date, calendar: calendar)
+        return try fetchEvents(in: cycle)
     }
 
     public func fetchIncompleteEventReasons() throws -> [UUID: SleepEventIncompleteReason] {
@@ -222,11 +278,41 @@ public final class SleepTrackingService: @unchecked Sendable {
         return analyzeTimeline(from: allEvents).incompleteEventReasons
     }
 
+    /// Returns the currently ongoing sleep interval when the baby is sleeping and `cycle` is the active cycle
+    /// containing `now` (including when the ongoing sleep started in an earlier cycle and is still in progress).
+    public func activeSleepInterval(
+        in cycle: SleepCycleRange,
+        configuration: SleepScheduleConfiguration? = nil,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) throws -> SleepInterval? {
+        guard cycle.contains(now) else {
+            return nil
+        }
+        guard case .sleeping(let since, let sleepEvent) = try getCurrentState(),
+              since <= now else {
+            return nil
+        }
+        let activeConfig = configuration ?? configurationManager.configuration
+        let classification = activeConfig.classify(timestamp: sleepEvent.timestamp, calendar: calendar)
+        return SleepInterval(
+            startEvent: sleepEvent,
+            endEvent: nil,
+            classification: classification
+        )
+    }
+
     // MARK: - Interval and Metrics Calculation
 
     /// Analyze chronological events into valid complete sleep blocks (`[Se durmió] -> [Se despertó]`),
     /// awake intervals, and any incomplete/orphaned events excluded from sleep block calculations.
-    public func analyzeTimeline(from events: [SleepEvent]) -> SleepTimelineAnalysis {
+    /// When `configuration` is provided, each sleep interval's classification is computed dynamically
+    /// against that 24-hour schedule configuration.
+    public func analyzeTimeline(
+        from events: [SleepEvent],
+        configuration: SleepScheduleConfiguration? = nil,
+        calendar: Calendar = .current
+    ) -> SleepTimelineAnalysis {
         let sorted = events.sorted { lhs, rhs in
             if lhs.timestamp != rhs.timestamp {
                 return lhs.timestamp < rhs.timestamp
@@ -243,10 +329,19 @@ public final class SleepTrackingService: @unchecked Sendable {
 
         var activeSleepEvent: SleepEvent? = nil
         var lastWakeEvent: SleepEvent? = nil
+        var hasSeenBoundaryEvent = false
+
+        func resolvedClassification(for sleepEvent: SleepEvent) -> SleepClassification {
+            if let configuration = configuration {
+                return configuration.classify(timestamp: sleepEvent.timestamp, calendar: calendar)
+            }
+            return sleepEvent.classification
+        }
 
         for event in sorted {
             switch event.type {
             case .sleep:
+                hasSeenBoundaryEvent = true
                 if let previousSleep = activeSleepEvent {
                     // Consecutive sleep without an intervening wake: mark previous as incomplete and exclude it.
                     incompleteEventReasons[previousSleep.id] = .missingSubsequentWake(isLatestTimelineEvent: false)
@@ -260,13 +355,23 @@ public final class SleepTrackingService: @unchecked Sendable {
 
             case .wake:
                 if let sleep = activeSleepEvent {
-                    sleepIntervals.append(SleepInterval(startEvent: sleep, endEvent: event, classification: sleep.classification))
+                    sleepIntervals.append(
+                        SleepInterval(
+                            startEvent: sleep,
+                            endEvent: event,
+                            classification: resolvedClassification(for: sleep)
+                        )
+                    )
                     activeSleepEvent = nil
                     lastWakeEvent = event
+                } else if !hasSeenBoundaryEvent {
+                    // Starting the timeline with a wake event is valid; track the awake window until the next sleep.
+                    lastWakeEvent = event
                 } else {
-                    // Orphan wake without a preceding valid sleep: ignore in sleep block calculation and flag as incomplete.
+                    // Consecutive wake without an intervening sleep: ignore in sleep block calculation and flag as incomplete.
                     incompleteEventReasons[event.id] = .missingPrecedingSleep
                 }
+                hasSeenBoundaryEvent = true
 
             case .bedtimeRoutineStart, .sleepAttempt:
                 // Non-boundary metadata events
@@ -293,68 +398,97 @@ public final class SleepTrackingService: @unchecked Sendable {
 
     /// Compute valid completed sleep intervals and awake intervals from ordered events.
     /// Safely handles out-of-order, consecutive duplicates, or incomplete sequences.
-    public func computeIntervals(from events: [SleepEvent]) -> (sleepIntervals: [SleepInterval], awakeIntervals: [AwakeInterval]) {
-        let analysis = analyzeTimeline(from: events)
+    public func computeIntervals(
+        from events: [SleepEvent],
+        configuration: SleepScheduleConfiguration? = nil,
+        calendar: Calendar = .current
+    ) -> (sleepIntervals: [SleepInterval], awakeIntervals: [AwakeInterval]) {
+        let analysis = analyzeTimeline(from: events, configuration: configuration, calendar: calendar)
         return (analysis.sleepIntervals, analysis.awakeIntervals)
     }
 
-    /// Calculate metrics for a 24-hour sleep day.
+    /// Calculate metrics for the configured 24-hour cycle containing `targetDate`.
     /// Only complete valid `[Se durmió] -> [Se despertó]` pairs contribute to sleep blocks and durations.
-    public func calculateDayMetrics(for targetDate: Date, calendar: Calendar = .current) throws -> DayMetrics {
-        let startOfDay = calendar.startOfDay(for: targetDate)
-        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
-            throw SleepTrackingError.invalidTimestamp("No se pudo calcular el rango del día.")
-        }
+    public func calculateDayMetrics(
+        for targetDate: Date,
+        calendar: Calendar = .current,
+        configuration: SleepScheduleConfiguration? = nil,
+        now: Date = Date()
+    ) throws -> DayMetrics {
+        let activeConfig = configuration ?? configurationManager.configuration
+        let cycle = activeConfig.cycleRange(containing: targetDate, calendar: calendar)
+        return try calculateCycleMetrics(
+            for: cycle,
+            calendar: calendar,
+            configuration: activeConfig,
+            now: now
+        )
+    }
 
-        // Fetch full timeline chronologically so cross-day pairing is always consistent
+    /// Calculate metrics, completed sleep intervals, and awake intervals strictly bounded by the given 24-hour `cycle`.
+    /// Only complete valid `[Se durmió] -> [Se despertó]` pairs contribute to sleep blocks and durations.
+    public func calculateCycleMetrics(
+        for cycle: SleepCycleRange,
+        calendar: Calendar = .current,
+        configuration: SleepScheduleConfiguration? = nil,
+        now: Date = Date()
+    ) throws -> DayMetrics {
+        let activeConfig = configuration ?? configurationManager.configuration
+
+        // Fetch full timeline chronologically so cross-cycle pairing and incomplete detection are always consistent
         let allEvents = try database.fetchAllEvents(ascending: true)
-        let analysis = analyzeTimeline(from: allEvents)
+        let analysis = analyzeTimeline(
+            from: allEvents,
+            configuration: activeConfig,
+            calendar: calendar
+        )
         let allSleeps = analysis.sleepIntervals
         let allAwakes = analysis.awakeIntervals
 
-        // Find completed sleep intervals that belong to or intersect targetDate
-        let daySleeps = allSleeps.filter { interval in
+        // Find completed sleep intervals that belong to or intersect [cycle.start, cycle.end)
+        let cycleSleeps = allSleeps.filter { interval in
             guard let end = interval.endTime else { return false }
             let start = interval.startTime
-            // Check intersection with startOfDay...endOfDay
-            return start < endOfDay && end > startOfDay
+            return cycle.contains(start) || (start < cycle.end && end > cycle.start)
         }
 
-        let dayAwakes = allAwakes.filter { interval in
+        let cycleAwakes = allAwakes.filter { interval in
             let start = interval.startTime
-            let end = interval.endTime ?? Date()
-            return start < endOfDay && end > startOfDay
+            let end = interval.endTime ?? now
+            return cycle.contains(start) || (start < cycle.end && end > cycle.start)
         }
 
-        // Morning wake time: first wake event occurring in this calendar day between 04:00 and 12:00
-        let morningWake = allEvents.first { event in
+        let cycleEvents = allEvents.filter { cycle.contains($0.timestamp) }
+
+        // Morning wake time: first wake event occurring in this cycle during morning / day-start window
+        let morningWake = cycleEvents.first { event in
             guard event.type == .wake else { return false }
-            guard event.timestamp >= startOfDay && event.timestamp < endOfDay else { return false }
             let hour = calendar.component(.hour, from: event.timestamp)
-            return hour >= 4 && hour < 12
+            let inStandardMorning = hour >= 4 && hour < 12
+            let inConfiguredDayStart = event.timestamp >= cycle.dayStart && event.timestamp < cycle.dayStart.addingTimeInterval(4 * 3600)
+            return inStandardMorning || inConfiguredDayStart
         }?.timestamp
 
-        // Night sleep onset: sleep event classified as nightSleep
-        let dayEvents = allEvents.filter { $0.timestamp >= startOfDay && $0.timestamp < endOfDay }
-        let nightSleepOnset = dayEvents.first { $0.type == .sleep && $0.classification == .nightSleep }?.timestamp
+        // Night sleep onset: first sleep event in this cycle dynamically classified as night sleep
+        let nightSleepOnset = cycleEvents.first { event in
+            event.type == .sleep && activeConfig.classify(timestamp: event.timestamp, calendar: calendar) == .nightSleep
+        }?.timestamp
 
-        // Durations calculation (clipped to this day's boundary for precise day metrics)
+        // Durations calculation (clipped strictly to this 24-hour cycle's boundaries)
         var totalDaytimeSleep: TimeInterval = 0
         var totalNightSleep: TimeInterval = 0
         var totalSleep: TimeInterval = 0
         var completedNapsCount = 0
 
-        for interval in daySleeps {
+        for interval in cycleSleeps {
             guard let endTime = interval.endTime else { continue }
-            let intervalStart = max(startOfDay, interval.startTime)
-            let intervalEnd = min(endOfDay, endTime)
+            let intervalStart = max(cycle.start, interval.startTime)
+            let intervalEnd = min(cycle.end, endTime)
             let effectiveDuration = max(0, intervalEnd.timeIntervalSince(intervalStart))
 
             totalSleep += effectiveDuration
 
-            let config = SleepConfigurationManager.shared.configuration
-            let isNap = interval.classification == .nap || (interval.classification == .unspecified && config.isDayTime(for: interval.startTime, calendar: calendar))
-
+            let isNap = interval.classification == .nap
             if isNap {
                 totalDaytimeSleep += effectiveDuration
                 if interval.isCompleted {
@@ -366,10 +500,11 @@ public final class SleepTrackingService: @unchecked Sendable {
         }
 
         return DayMetrics(
-            date: startOfDay,
+            date: cycle.start,
+            cycleEnd: cycle.end,
             morningWakeTime: morningWake,
-            sleepIntervals: daySleeps,
-            awakeIntervals: dayAwakes,
+            sleepIntervals: cycleSleeps,
+            awakeIntervals: cycleAwakes,
             completedNapsCount: completedNapsCount,
             totalDaytimeSleepDuration: totalDaytimeSleep,
             totalNightSleepDuration: totalNightSleep,
