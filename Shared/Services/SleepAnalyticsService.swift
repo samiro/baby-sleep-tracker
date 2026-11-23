@@ -133,6 +133,7 @@ public final class SleepAnalyticsService: @unchecked Sendable {
                 activeCyclesCount: 0,
                 emptyCyclesCount: 0,
                 excludedIncompleteEventsCount: 0,
+                excludedIncompleteEvents: [],
                 averageTotalSleepDuration: nil,
                 averageNightSleepDuration: nil,
                 averageDaytimeSleepDuration: nil,
@@ -144,6 +145,9 @@ public final class SleepAnalyticsService: @unchecked Sendable {
                 averageMorningWakeTime: nil,
                 averageDaytimeWakeWindow: nil,
                 daytimeWakeWindowsCount: 0,
+                averageDaytimeWakingsPerCycle: nil,
+                averageNightWakingDuration: nil,
+                nightWakeWindowsCount: 0,
                 averageNapsPerDay: nil,
                 averageNightWakingsPerCycle: nil
             )
@@ -163,12 +167,17 @@ public final class SleepAnalyticsService: @unchecked Sendable {
         let fullRangeStart = firstCycle.start
         let fullRangeEnd = lastCycle.end
 
-        // Count incomplete/orphaned events that occurred inside the selected range for transparency.
-        let excludedIncompleteCount = allEvents.filter { event in
-            event.timestamp >= fullRangeStart
-                && event.timestamp < fullRangeEnd
-                && analysis.incompleteEventReasons[event.id] != nil
-        }.count
+        // Collect incomplete/ongoing events that occurred inside the selected range for transparency & drill-down.
+        let excludedIncompleteEvents: [ExcludedIncompleteEvent] = allEvents.compactMap { event in
+            guard event.timestamp >= fullRangeStart,
+                  event.timestamp < fullRangeEnd,
+                  let reason = analysis.incompleteEventReasons[event.id] else {
+                return nil
+            }
+            return ExcludedIncompleteEvent(event: event, reason: reason)
+        }
+        .sorted { $0.timestamp > $1.timestamp }
+        let excludedIncompleteCount = excludedIncompleteEvents.count
 
         // Build per-cycle summaries and accumulate range-level records.
         var cycleSummaries: [AnalyticsCycleSummary] = []
@@ -180,8 +189,53 @@ public final class SleepAnalyticsService: @unchecked Sendable {
         var nightOnsetDates: [Date] = []
         var morningWakeDates: [Date] = []
         var daytimeWakeWindowDurations: [TimeInterval] = []
+        var nightWakingDurations: [TimeInterval] = []
+        var daytimeWakingsByCycle = Array(repeating: 0, count: cycles.count)
 
-        for cycle in cycles {
+        // Compute daytime wake windows between consecutive completed sleep blocks.
+        // A wake window belongs to a cycle's daytime if:
+        //  (a) It starts during the cycle's daytime window [cycle.dayStart, cycle.end) and ends before the next cycle's dayStart
+        //      (covering wake windows between naps and the final wake window before bedtime), OR
+        //  (b) It starts during the cycle's night window [cycle.start, cycle.dayStart) and ends during the cycle's daytime window
+        //      (covering early-morning wake before the first nap).
+        // Gaps spanning across empty/unlogged days are naturally excluded because endTime >= nextCycle.dayStart.
+        if completedSleeps.count >= 2 {
+            // Precompute next cycle dayStart for each cycle in range.
+            let cycleWindows: [(cycle: SleepCycleRange, nextDayStart: Date)] = cycles.map { cycle in
+                let nextCycle = configuration.cycleRange(offset: 1, from: cycle.start, calendar: calendar)
+                return (cycle, nextCycle.dayStart)
+            }
+
+            for index in 0..<(completedSleeps.count - 1) {
+                guard let wakeStart = completedSleeps[index].endTime else { continue }
+                let wakeEnd = completedSleeps[index + 1].startTime
+                let duration = wakeEnd.timeIntervalSince(wakeStart)
+                guard duration > 0 else { continue }
+
+                // Check if this wake window belongs to any cycle's daytime in the selected range.
+                if let matchedCycleIndex = cycleWindows.firstIndex(where: { entry in
+                    let cycle = entry.cycle
+                    let startsInDaytime = wakeStart >= cycle.dayStart
+                        && wakeStart < cycle.end
+                        && configuration.isDayTime(for: wakeStart, calendar: calendar)
+                    if startsInDaytime {
+                        return wakeEnd < entry.nextDayStart
+                    }
+
+                    let startsInNightAndEndsInDaytime = wakeStart >= cycle.start
+                        && wakeStart < cycle.dayStart
+                        && wakeEnd >= cycle.dayStart
+                        && wakeEnd < cycle.end
+                        && configuration.isDayTime(for: wakeEnd, calendar: calendar)
+                    return startsInNightAndEndsInDaytime
+                }) {
+                    daytimeWakeWindowDurations.append(duration)
+                    daytimeWakingsByCycle[matchedCycleIndex] += 1
+                }
+            }
+        }
+
+        for (cycleIndex, cycle) in cycles.enumerated() {
             // Intervals intersecting [cycle.start, cycle.end) contribute their clipped duration to this cycle.
             let intersectingSleeps = completedSleeps.filter { interval in
                 guard let endTime = interval.endTime else { return false }
@@ -215,7 +269,18 @@ public final class SleepAnalyticsService: @unchecked Sendable {
             let cycleNightBlocks = startingSleeps.filter { $0.classification == .nightSleep }
 
             // Night wakings: interruptions between consecutive completed night stretches within the cycle's night window.
-            let nightWakings = max(0, cycleNightBlocks.count - 1)
+            var cycleNightWakingDurations: [TimeInterval] = []
+            if cycleNightBlocks.count >= 2 {
+                for index in 0..<(cycleNightBlocks.count - 1) {
+                    guard let wakeStart = cycleNightBlocks[index].endTime else { continue }
+                    let wakeEnd = cycleNightBlocks[index + 1].startTime
+                    let duration = wakeEnd.timeIntervalSince(wakeStart)
+                    if duration > 0 {
+                        cycleNightWakingDurations.append(duration)
+                    }
+                }
+            }
+            let nightWakings = cycleNightWakingDurations.count
 
             // Night sleep onset: first completed night sleep block starting inside this cycle's night window.
             let nightOnset = cycleNightBlocks.first { interval in
@@ -237,6 +302,7 @@ public final class SleepAnalyticsService: @unchecked Sendable {
 
             if hasData {
                 allRangeNaps.append(contentsOf: cycleNaps)
+                nightWakingDurations.append(contentsOf: cycleNightWakingDurations)
 
                 for nightBlock in cycleNightBlocks {
                     guard let endTime = nightBlock.endTime else { continue }
@@ -299,55 +365,12 @@ public final class SleepAnalyticsService: @unchecked Sendable {
                     napsCount: cycleNaps.count,
                     nightSleepBlocksCount: cycleNightBlocks.count,
                     nightWakingsCount: nightWakings,
+                    daytimeWakingsCount: daytimeWakingsByCycle[cycleIndex],
                     nightSleepOnset: nightOnset,
                     morningWakeTime: morningWake,
                     hasCompletedSleepData: hasData
                 )
             )
-        }
-
-        // Compute daytime wake windows between consecutive completed sleep blocks.
-        // A wake window belongs to a cycle's daytime if:
-        //  (a) It starts during the cycle's daytime window [cycle.dayStart, cycle.end) and ends before the next cycle's dayStart
-        //      (covering wake windows between naps and the final wake window before bedtime), OR
-        //  (b) It starts during the cycle's night window [cycle.start, cycle.dayStart) and ends during the cycle's daytime window
-        //      (covering early-morning wake before the first nap).
-        // Gaps spanning across empty/unlogged days are naturally excluded because endTime >= nextCycle.dayStart.
-        if completedSleeps.count >= 2 {
-            // Precompute next cycle dayStart for each cycle in range.
-            let cycleWindows: [(cycle: SleepCycleRange, nextDayStart: Date)] = cycles.map { cycle in
-                let nextCycle = configuration.cycleRange(offset: 1, from: cycle.start, calendar: calendar)
-                return (cycle, nextCycle.dayStart)
-            }
-
-            for index in 0..<(completedSleeps.count - 1) {
-                guard let wakeStart = completedSleeps[index].endTime else { continue }
-                let wakeEnd = completedSleeps[index + 1].startTime
-                let duration = wakeEnd.timeIntervalSince(wakeStart)
-                guard duration > 0 else { continue }
-
-                // Check if this wake window belongs to any cycle's daytime in the selected range.
-                let matchesDaytimeWindow = cycleWindows.contains { entry in
-                    let cycle = entry.cycle
-                    let startsInDaytime = wakeStart >= cycle.dayStart
-                        && wakeStart < cycle.end
-                        && configuration.isDayTime(for: wakeStart, calendar: calendar)
-                    if startsInDaytime {
-                        return wakeEnd < entry.nextDayStart
-                    }
-
-                    let startsInNightAndEndsInDaytime = wakeStart >= cycle.start
-                        && wakeStart < cycle.dayStart
-                        && wakeEnd >= cycle.dayStart
-                        && wakeEnd < cycle.end
-                        && configuration.isDayTime(for: wakeEnd, calendar: calendar)
-                    return startsInNightAndEndsInDaytime
-                }
-
-                if matchesDaytimeWindow {
-                    daytimeWakeWindowDurations.append(duration)
-                }
-            }
         }
 
         // Exclude cycles with no completed sleep blocks from average denominators.
@@ -359,6 +382,7 @@ public final class SleepAnalyticsService: @unchecked Sendable {
         let averageNightSleep: TimeInterval?
         let averageDaytimeSleep: TimeInterval?
         let averageNapsPerDay: Double?
+        let averageDaytimeWakings: Double?
         let averageNightWakings: Double?
 
         if activeCount > 0 {
@@ -367,12 +391,14 @@ public final class SleepAnalyticsService: @unchecked Sendable {
             averageNightSleep = activeCycles.reduce(0) { $0 + $1.nightSleepDuration } / denominator
             averageDaytimeSleep = activeCycles.reduce(0) { $0 + $1.daytimeSleepDuration } / denominator
             averageNapsPerDay = Double(activeCycles.reduce(0) { $0 + $1.napsCount }) / denominator
+            averageDaytimeWakings = Double(activeCycles.reduce(0) { $0 + $1.daytimeWakingsCount }) / denominator
             averageNightWakings = Double(activeCycles.reduce(0) { $0 + $1.nightWakingsCount }) / denominator
         } else {
             averageTotalSleep = nil
             averageNightSleep = nil
             averageDaytimeSleep = nil
             averageNapsPerDay = nil
+            averageDaytimeWakings = nil
             averageNightWakings = nil
         }
 
@@ -383,6 +409,10 @@ public final class SleepAnalyticsService: @unchecked Sendable {
         let averageWakeWindow: TimeInterval? = daytimeWakeWindowDurations.isEmpty
             ? nil
             : daytimeWakeWindowDurations.reduce(0, +) / Double(daytimeWakeWindowDurations.count)
+
+        let averageNightWakingDuration: TimeInterval? = nightWakingDurations.isEmpty
+            ? nil
+            : nightWakingDurations.reduce(0, +) / Double(nightWakingDurations.count)
 
         let averageNightOnset = computeTimeOfDayAverage(
             dates: nightOnsetDates,
@@ -405,6 +435,7 @@ public final class SleepAnalyticsService: @unchecked Sendable {
             activeCyclesCount: activeCount,
             emptyCyclesCount: emptyCount,
             excludedIncompleteEventsCount: excludedIncompleteCount,
+            excludedIncompleteEvents: excludedIncompleteEvents,
             averageTotalSleepDuration: averageTotalSleep,
             averageNightSleepDuration: averageNightSleep,
             averageDaytimeSleepDuration: averageDaytimeSleep,
@@ -416,6 +447,9 @@ public final class SleepAnalyticsService: @unchecked Sendable {
             averageMorningWakeTime: averageMorningWake,
             averageDaytimeWakeWindow: averageWakeWindow,
             daytimeWakeWindowsCount: daytimeWakeWindowDurations.count,
+            averageDaytimeWakingsPerCycle: averageDaytimeWakings,
+            averageNightWakingDuration: averageNightWakingDuration,
+            nightWakeWindowsCount: nightWakingDurations.count,
             averageNapsPerDay: averageNapsPerDay,
             averageNightWakingsPerCycle: averageNightWakings
         )

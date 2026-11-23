@@ -200,6 +200,14 @@ final class SleepAnalyticsTests: XCTestCase {
 
         XCTAssertEqual(report.activeCyclesCount, 1)
         XCTAssertEqual(report.excludedIncompleteEventsCount, 3)
+        XCTAssertEqual(report.excludedIncompleteEvents.count, 3)
+        // Sorted most recent first: trailing ongoing sleep (14:00), extra wake (07:30), orphaned sleep (19:15)
+        XCTAssertEqual(report.ongoingExcludedEvent?.event.id, events[6].id)
+        XCTAssertEqual(report.realIncompleteEvents.count, 2)
+        XCTAssertEqual(report.realIncompleteEvents[0].event.id, events[3].id)
+        XCTAssertEqual(report.realIncompleteEvents[0].reason, .missingPrecedingSleep)
+        XCTAssertEqual(report.realIncompleteEvents[1].event.id, events[0].id)
+        XCTAssertEqual(report.realIncompleteEvents[1].reason, .missingSubsequentWake(isLatestTimelineEvent: false))
         XCTAssertEqual(report.averageNightSleepDuration ?? 0, 11 * 3600, accuracy: 1.0)
         XCTAssertEqual(report.averageDaytimeSleepDuration ?? 0, 1.5 * 3600, accuracy: 1.0)
         XCTAssertEqual(report.averageTotalSleepDuration ?? 0, 12.5 * 3600, accuracy: 1.0)
@@ -231,6 +239,8 @@ final class SleepAnalyticsTests: XCTestCase {
         XCTAssertTrue(report.isEmpty)
         XCTAssertEqual(report.activeCyclesCount, 0)
         XCTAssertEqual(report.excludedIncompleteEventsCount, 1)
+        XCTAssertEqual(report.excludedIncompleteEvents.count, 1)
+        XCTAssertEqual(report.excludedIncompleteEvents.first?.event.id, events[0].id)
         XCTAssertNil(report.averageTotalSleepDuration)
         XCTAssertNil(report.longestNightStretch)
         XCTAssertNil(report.averageNightSleepOnset)
@@ -305,11 +315,104 @@ final class SleepAnalyticsTests: XCTestCase {
             calendar: calendar
         )
 
-        // Daytime wake windows: 2h, 3h, 4h -> average = 3h (3 windows)
+        // Daytime wake windows: 2h, 3h, 4h -> average = 3h (3 windows across 3 active cycles -> 1.0/cycle)
         XCTAssertEqual(report.daytimeWakeWindowsCount, 3)
         XCTAssertEqual(report.averageDaytimeWakeWindow ?? 0, 3 * 3600, accuracy: 1.0)
-        // Night wakings: Cycle Nov 17 had 1, Cycle Nov 18 had 0, Cycle Nov 21 had 0 -> 1 / 3
+        XCTAssertEqual(report.averageDaytimeWakingsPerCycle ?? 0, 1.0, accuracy: 0.001)
+        // Night wakings: Cycle Nov 17 had 1 (30m), Cycle Nov 18 had 0, Cycle Nov 21 had 0 -> 1 / 3, avg duration = 30m
         XCTAssertEqual(report.averageNightWakingsPerCycle ?? 0, 1.0 / 3.0, accuracy: 0.001)
+        XCTAssertEqual(report.nightWakeWindowsCount, 1)
+        XCTAssertEqual(report.averageNightWakingDuration ?? 0, 30 * 60, accuracy: 1.0)
+    }
+
+    func testDaytimeAndNightWakingCountsAndDurationsAcrossActiveCycles() {
+        let config = SleepScheduleConfiguration.standard // 19:00 - 07:00
+        let ref = makeDate(day: 22, hour: 18, minute: 0)
+
+        var events: [SleepEvent] = []
+
+        // Cycle Nov 18 (active #1):
+        // - Night block 1: 19:30 -> 23:00
+        // - Night waking 1: 23:00 -> 23:20 (20m)
+        // - Night block 2: 23:20 -> 03:00
+        // - Night waking 2: 03:00 -> 03:40 (40m)
+        // - Night block 3: 03:40 -> 07:00
+        // - Daytime wake 1: 07:00 -> 09:30 (2h 30m)
+        // - Nap 1: 09:30 -> 11:00
+        // - Daytime wake 2: 11:00 -> 14:30 (3h 30m)
+        // - Nap 2: 14:30 -> 16:00
+        // - Daytime wake 3: 16:00 -> 19:30 (3h 30m) -> closed by Cycle Nov 19 bedtime
+        events += makeBlock(startDay: 18, startHour: 19, startMinute: 30, endDay: 18, endHour: 23, endMinute: 0)
+        events += makeBlock(startDay: 18, startHour: 23, startMinute: 20, endDay: 19, endHour: 3, endMinute: 0)
+        events += makeBlock(startDay: 19, startHour: 3, startMinute: 40, endDay: 19, endHour: 7, endMinute: 0)
+        events += makeBlock(startDay: 19, startHour: 9, startMinute: 30, endDay: 19, endHour: 11, endMinute: 0)
+        events += makeBlock(startDay: 19, startHour: 14, startMinute: 30, endDay: 19, endHour: 16, endMinute: 0)
+
+        // Cycle Nov 19 (active #2):
+        // - Night block 1: 19:30 -> 01:00
+        // - Night waking 1: 01:00 -> 02:00 (60m)
+        // - Night block 2: 02:00 -> 07:00
+        // - Daytime wake 1: 07:00 -> 10:00 (3h)
+        // - Nap 1: 10:00 -> 11:30
+        events += makeBlock(startDay: 19, startHour: 19, startMinute: 30, endDay: 20, endHour: 1, endMinute: 0)
+        events += makeBlock(startDay: 20, startHour: 2, startMinute: 0, endDay: 20, endHour: 7, endMinute: 0)
+        events += makeBlock(startDay: 20, startHour: 10, startMinute: 0, endDay: 20, endHour: 11, endMinute: 30)
+
+        // Remaining 5 cycles in the 7-day range are empty and MUST be excluded from denominators.
+        let report = analyticsService.computeReport(
+            from: events,
+            preset: .last7Days,
+            configuration: config,
+            referenceDate: ref,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(report.activeCyclesCount, 2)
+        XCTAssertEqual(report.emptyCyclesCount, 5)
+
+        // Daytime wakings: 3 in Nov 18 + 1 in Nov 19 = 4 across 2 active cycles -> 2.0 / day
+        // Durations: 150m, 210m, 210m, 180m -> avg = 750 / 4 = 187.5m = 11250s
+        XCTAssertEqual(report.daytimeWakeWindowsCount, 4)
+        XCTAssertEqual(report.averageDaytimeWakingsPerCycle ?? 0, 2.0, accuracy: 0.001)
+        XCTAssertEqual(report.averageDaytimeWakeWindow ?? 0, 11250, accuracy: 1.0)
+
+        // Night wakings: 2 in Nov 18 (20m, 40m) + 1 in Nov 19 (60m) = 3 across 2 active cycles -> 1.5 / night
+        // Durations: 20m, 40m, 60m -> avg = 40m = 2400s
+        XCTAssertEqual(report.nightWakeWindowsCount, 3)
+        XCTAssertEqual(report.averageNightWakingsPerCycle ?? 0, 1.5, accuracy: 0.001)
+        XCTAssertEqual(report.averageNightWakingDuration ?? 0, 40 * 60, accuracy: 1.0)
+
+        let cycle18 = report.cycles.first { $0.cycle.start == makeDate(day: 18, hour: 19) }
+        let cycle19 = report.cycles.first { $0.cycle.start == makeDate(day: 19, hour: 19) }
+        XCTAssertEqual(cycle18?.daytimeWakingsCount, 3)
+        XCTAssertEqual(cycle18?.nightWakingsCount, 2)
+        XCTAssertEqual(cycle19?.daytimeWakingsCount, 1)
+        XCTAssertEqual(cycle19?.nightWakingsCount, 1)
+    }
+
+    func testZeroNightWakingsReturnsZeroCountAndNilDuration() {
+        let config = SleepScheduleConfiguration.standard // 19:00 - 07:00
+        let ref = makeDate(day: 22, hour: 18, minute: 0)
+
+        // Uninterrupted night sleep + 1 nap (no night wakings, 1 daytime wake window)
+        var events: [SleepEvent] = []
+        events += makeBlock(startDay: 20, startHour: 20, startMinute: 0, endDay: 21, endHour: 7, endMinute: 0)
+        events += makeBlock(startDay: 21, startHour: 10, startMinute: 0, endDay: 21, endHour: 11, endMinute: 30)
+
+        let report = analyticsService.computeReport(
+            from: events,
+            preset: .last7Days,
+            configuration: config,
+            referenceDate: ref,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(report.activeCyclesCount, 1)
+        XCTAssertEqual(report.averageNightWakingsPerCycle ?? -1, 0.0, accuracy: 0.001)
+        XCTAssertEqual(report.nightWakeWindowsCount, 0)
+        XCTAssertNil(report.averageNightWakingDuration)
+        XCTAssertEqual(report.averageDaytimeWakingsPerCycle ?? -1, 1.0, accuracy: 0.001)
+        XCTAssertEqual(report.averageDaytimeWakeWindow ?? 0, 3 * 3600, accuracy: 1.0)
     }
 
     // MARK: - 4. Dynamic Classification & Cross-Cycle Clipping
