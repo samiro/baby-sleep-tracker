@@ -460,18 +460,17 @@ public final class SleepTrackingService: @unchecked Sendable {
 
         let cycleEvents = allEvents.filter { cycle.contains($0.timestamp) }
 
-        // Morning wake time: first wake event occurring in this cycle during morning / day-start window
+        // Morning wake time: first wake event occurring strictly within the configured daytime window of this cycle
         let morningWake = cycleEvents.first { event in
-            guard event.type == .wake else { return false }
-            let hour = calendar.component(.hour, from: event.timestamp)
-            let inStandardMorning = hour >= 4 && hour < 12
-            let inConfiguredDayStart = event.timestamp >= cycle.dayStart && event.timestamp < cycle.dayStart.addingTimeInterval(4 * 3600)
-            return inStandardMorning || inConfiguredDayStart
+            event.type == .wake
+                && event.timestamp >= cycle.dayStart
+                && activeConfig.isDayTime(for: event.timestamp, calendar: calendar)
         }?.timestamp
 
-        // Night sleep onset: first sleep event in this cycle dynamically classified as night sleep
+        // Night sleep onset: first sleep event occurring strictly within the configured nighttime window of this cycle
         let nightSleepOnset = cycleEvents.first { event in
-            event.type == .sleep && activeConfig.classify(timestamp: event.timestamp, calendar: calendar) == .nightSleep
+            event.type == .sleep
+                && activeConfig.isNightTime(for: event.timestamp, calendar: calendar)
         }?.timestamp
 
         // Durations calculation (clipped strictly to this 24-hour cycle's boundaries)
