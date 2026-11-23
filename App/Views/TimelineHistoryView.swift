@@ -88,7 +88,12 @@ public struct TimelineHistoryView: View {
 
                     // Cycle Metrics Summary
                     if let metrics = metrics {
-                        DailyMetricsCardView(metrics: metrics, title: "Resumen del ciclo")
+                        CycleSummaryCardView(
+                            metrics: metrics,
+                            configuration: activeConfig,
+                            activeOngoingInterval: activeOngoingInterval,
+                            title: "Resumen del ciclo"
+                        )
                     }
 
                     // Sleep Intervals Section

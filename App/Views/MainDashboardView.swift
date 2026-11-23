@@ -6,7 +6,9 @@ public struct MainDashboardView: View {
     @State private var activeBabyName: String = BabyProfileManager.shared.displayName
     @State private var currentState: CurrentSleepState = .unknown
     @State private var mostRecentInterval: TrackedInterval?
+    @State private var activeConfig: SleepScheduleConfiguration = SleepConfigurationManager.shared.configuration
     @State private var todayMetrics: DayMetrics?
+    @State private var activeOngoingInterval: SleepInterval?
     @State private var feedbackMessage: String?
     @State private var showFeedbackAlert = false
     @State private var showAddEventSheet = false
@@ -143,7 +145,12 @@ public struct MainDashboardView: View {
                     }
 
                     if let metrics = todayMetrics {
-                        DailyMetricsCardView(metrics: metrics)
+                        CycleSummaryCardView(
+                            metrics: metrics,
+                            configuration: activeConfig,
+                            activeOngoingInterval: activeOngoingInterval,
+                            title: "Resumen del ciclo"
+                        )
                     }
                 }
                 .padding(.horizontal)
@@ -202,9 +209,14 @@ public struct MainDashboardView: View {
     }
 
     private func refresh() {
+        let config = SleepConfigurationManager.shared.configuration
+        activeConfig = config
+        let now = Date()
+        let cycle = config.cycleRange(containing: now)
         let service = SleepTrackingService.shared
         currentState = (try? service.getCurrentState()) ?? .unknown
         mostRecentInterval = try? service.getMostRecentInterval()
-        todayMetrics = try? service.calculateDayMetrics(for: Date())
+        todayMetrics = try? service.calculateCycleMetrics(for: cycle, configuration: config, now: now)
+        activeOngoingInterval = try? service.activeSleepInterval(in: cycle, configuration: config, now: now)
     }
 }

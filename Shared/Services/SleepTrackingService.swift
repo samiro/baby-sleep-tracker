@@ -458,26 +458,35 @@ public final class SleepTrackingService: @unchecked Sendable {
             return cycle.contains(start) || (start < cycle.end && end > cycle.start)
         }
 
-        let cycleEvents = allEvents.filter { cycle.contains($0.timestamp) }
+        let cycleEvents = allEvents.filter { event in
+            guard cycle.contains(event.timestamp) else { return false }
+            if let reason = analysis.incompleteEventReasons[event.id], !reason.isOngoing {
+                return false
+            }
+            return true
+        }
 
-        // Morning wake time: first wake event occurring strictly within the configured daytime window of this cycle
+        // Morning wake time: first valid wake event occurring strictly within the configured daytime window of this cycle
         let morningWake = cycleEvents.first { event in
             event.type == .wake
                 && event.timestamp >= cycle.dayStart
                 && activeConfig.isDayTime(for: event.timestamp, calendar: calendar)
         }?.timestamp
 
-        // Night sleep onset: first sleep event occurring strictly within the configured nighttime window of this cycle
+        // Night sleep onset: first valid sleep event occurring strictly within the configured nighttime window of this cycle
         let nightSleepOnset = cycleEvents.first { event in
             event.type == .sleep
                 && activeConfig.isNightTime(for: event.timestamp, calendar: calendar)
         }?.timestamp
 
-        // Durations calculation (clipped strictly to this 24-hour cycle's boundaries)
+        // Durations & longest sleep stretches calculation (clipped strictly to this 24-hour cycle's boundaries,
+        // using exclusively valid completed [Se durmió] -> [Se despertó] blocks)
         var totalDaytimeSleep: TimeInterval = 0
         var totalNightSleep: TimeInterval = 0
         var totalSleep: TimeInterval = 0
         var completedNapsCount = 0
+        var longestNightSleepDuration: TimeInterval? = nil
+        var longestDaytimeSleepDuration: TimeInterval? = nil
 
         for interval in cycleSleeps {
             guard let endTime = interval.endTime else { continue }
@@ -493,8 +502,85 @@ public final class SleepTrackingService: @unchecked Sendable {
                 if interval.isCompleted {
                     completedNapsCount += 1
                 }
+                if effectiveDuration > 0 {
+                    if let currentMax = longestDaytimeSleepDuration {
+                        longestDaytimeSleepDuration = max(currentMax, effectiveDuration)
+                    } else {
+                        longestDaytimeSleepDuration = effectiveDuration
+                    }
+                }
             } else {
                 totalNightSleep += effectiveDuration
+                if effectiveDuration > 0 {
+                    if let currentMax = longestNightSleepDuration {
+                        longestNightSleepDuration = max(currentMax, effectiveDuration)
+                    } else {
+                        longestNightSleepDuration = effectiveDuration
+                    }
+                }
+            }
+        }
+
+        // Nighttime and daytime awake stretches: computed strictly from valid completed [Se despertó] -> [Se durmió]
+        // intervals, ignoring ongoing/unclosed awake periods and orphaned/incomplete events.
+        let nextCycle = activeConfig.cycleRange(offset: 1, from: cycle.start, calendar: calendar)
+        var nightWakingsCount = 0
+        var longestNightAwakeDuration: TimeInterval? = nil
+        var longestDaytimeAwakeDuration: TimeInterval? = nil
+
+        for awake in allAwakes {
+            guard let nextSleepEvent = awake.nextSleepEvent else { continue }
+            if analysis.incompleteEventReasons[awake.wakeEvent.id] != nil {
+                continue
+            }
+            if let nextReason = analysis.incompleteEventReasons[nextSleepEvent.id], !nextReason.isOngoing {
+                continue
+            }
+
+            let wakeStart = awake.startTime
+            let wakeEnd = nextSleepEvent.timestamp
+            let duration = wakeEnd.timeIntervalSince(wakeStart)
+            guard duration > 0 else { continue }
+
+            // Nighttime awake stretch: occurs strictly within this cycle's night window [cycle.start, cycle.dayStart)
+            // after night sleep has begun (so waking from a late nap prior to bedtime is not counted as a night waking).
+            if let onset = nightSleepOnset,
+               wakeStart >= onset,
+               wakeStart >= cycle.start,
+               wakeStart < cycle.dayStart,
+               wakeEnd < cycle.dayStart,
+               activeConfig.isNightTime(for: wakeStart, calendar: calendar),
+               activeConfig.isNightTime(for: wakeEnd, calendar: calendar) {
+                nightWakingsCount += 1
+                if let currentMax = longestNightAwakeDuration {
+                    longestNightAwakeDuration = max(currentMax, duration)
+                } else {
+                    longestNightAwakeDuration = duration
+                }
+                continue
+            }
+
+            // Daytime awake stretch (wake window):
+            //  (a) Starts during this cycle's daytime window [cycle.dayStart, cycle.end) and ends before next cycle's dayStart
+            //      (covers wake windows between naps and the final wake window before bedtime), OR
+            //  (b) Starts during this cycle's night window [cycle.start, cycle.dayStart) (early-morning wake)
+            //      and stays awake into this cycle's daytime, ending before next cycle's dayStart.
+            let startsInDaytime = wakeStart >= cycle.dayStart
+                && wakeStart < cycle.end
+                && activeConfig.isDayTime(for: wakeStart, calendar: calendar)
+                && wakeEnd < nextCycle.dayStart
+
+            let startsEarlyMorningAndSpansDaytime = wakeStart >= cycle.start
+                && wakeStart < cycle.dayStart
+                && wakeEnd >= cycle.dayStart
+                && wakeEnd < nextCycle.dayStart
+
+            if startsInDaytime || startsEarlyMorningAndSpansDaytime {
+                if let currentMax = longestDaytimeAwakeDuration {
+                    longestDaytimeAwakeDuration = max(currentMax, duration)
+                } else {
+                    longestDaytimeAwakeDuration = duration
+                }
             }
         }
 
@@ -508,7 +594,12 @@ public final class SleepTrackingService: @unchecked Sendable {
             totalDaytimeSleepDuration: totalDaytimeSleep,
             totalNightSleepDuration: totalNightSleep,
             totalSleepDuration: totalSleep,
-            nightSleepOnset: nightSleepOnset
+            nightSleepOnset: nightSleepOnset,
+            nightWakingsCount: nightWakingsCount,
+            longestNightSleepDuration: longestNightSleepDuration,
+            longestNightAwakeDuration: longestNightAwakeDuration,
+            longestDaytimeSleepDuration: longestDaytimeSleepDuration,
+            longestDaytimeAwakeDuration: longestDaytimeAwakeDuration
         )
     }
 }
