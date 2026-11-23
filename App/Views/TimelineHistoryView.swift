@@ -2,10 +2,12 @@ import SwiftUI
 
 public struct TimelineHistoryView: View {
     @Binding private var targetDate: Date?
+    @Binding private var targetEventId: UUID?
     @State private var cycleOffset: Int = 0
     @State private var activeConfig: SleepScheduleConfiguration = SleepConfigurationManager.shared.configuration
     @State private var events: [SleepEvent] = []
     @State private var incompleteEventReasons: [UUID: SleepEventIncompleteReason] = [:]
+    @State private var pendingScrollEventId: UUID? = nil
     @State private var metrics: DayMetrics?
     @State private var activeOngoingInterval: SleepInterval?
     @State private var editingEvent: SleepEvent?
@@ -78,12 +80,17 @@ public struct TimelineHistoryView: View {
         return SleepEvent.clampedInitialTimestamp(shifted, now: now)
     }
 
-    public init(targetDate: Binding<Date?> = .constant(nil)) {
+    public init(
+        targetDate: Binding<Date?> = .constant(nil),
+        targetEventId: Binding<UUID?> = .constant(nil)
+    ) {
         self._targetDate = targetDate
+        self._targetEventId = targetEventId
     }
 
     public var body: some View {
         NavigationStack {
+            ScrollViewReader { scrollProxy in
             List {
                 Group {
                     // Cycle Navigation Bar
@@ -133,6 +140,7 @@ public struct TimelineHistoryView: View {
                                 } label: {
                                     eventRow(for: event)
                                 }
+                                .id(event.id.uuidString)
                                 .buttonStyle(.plain)
                                 .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                                 .listRowSeparator(.hidden)
@@ -245,15 +253,24 @@ public struct TimelineHistoryView: View {
                 if !applyPendingTargetDateIfNeeded() {
                     reloadData()
                 }
+                scrollToTargetEventIfNeeded(using: scrollProxy)
             }
             .onChange(of: targetDate) { _, _ in
-                _ = applyPendingTargetDateIfNeeded()
+                if applyPendingTargetDateIfNeeded() {
+                    scrollToTargetEventIfNeeded(using: scrollProxy)
+                }
+            }
+            .onChange(of: targetEventId) { _, _ in
+                if applyPendingTargetDateIfNeeded() {
+                    scrollToTargetEventIfNeeded(using: scrollProxy)
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .sleepEventsDidChange)) { _ in
                 reloadData()
             }
             .onReceive(NotificationCenter.default.publisher(for: .sleepConfigurationDidChange)) { _ in
                 reloadData()
+            }
             }
         }
     }
@@ -523,6 +540,7 @@ public struct TimelineHistoryView: View {
         let nextOffset = min(0, cycleOffset + offset)
         guard nextOffset != cycleOffset else { return }
         cycleOffset = nextOffset
+        pendingScrollEventId = nil
         reloadData()
     }
 
@@ -532,9 +550,24 @@ public struct TimelineHistoryView: View {
         let config = SleepConfigurationManager.shared.configuration
         activeConfig = config
         cycleOffset = config.cycleOffset(for: date)
+        pendingScrollEventId = targetEventId
         targetDate = nil
+        targetEventId = nil
         reloadData()
         return true
+    }
+
+    private func scrollToTargetEventIfNeeded(using proxy: ScrollViewProxy) {
+        guard let targetId = pendingScrollEventId,
+              events.contains(where: { $0.id == targetId }) else {
+            return
+        }
+        pendingScrollEventId = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            withAnimation(.easeInOut(duration: 0.35)) {
+                proxy.scrollTo(targetId.uuidString, anchor: .center)
+            }
+        }
     }
 
     private func reloadData() {

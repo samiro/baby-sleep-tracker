@@ -155,6 +155,7 @@ public struct AnalyticsCycleSummary: Identifiable, Equatable, Sendable {
     public let napsCount: Int
     public let nightSleepBlocksCount: Int
     public let nightWakingsCount: Int
+    public let daytimeWakingsCount: Int
     public let nightSleepOnset: Date?
     public let morningWakeTime: Date?
     /// Indicates whether at least one valid completed sleep block contributed to this cycle.
@@ -168,6 +169,7 @@ public struct AnalyticsCycleSummary: Identifiable, Equatable, Sendable {
         napsCount: Int,
         nightSleepBlocksCount: Int,
         nightWakingsCount: Int,
+        daytimeWakingsCount: Int = 0,
         nightSleepOnset: Date?,
         morningWakeTime: Date?,
         hasCompletedSleepData: Bool
@@ -179,6 +181,7 @@ public struct AnalyticsCycleSummary: Identifiable, Equatable, Sendable {
         self.napsCount = napsCount
         self.nightSleepBlocksCount = nightSleepBlocksCount
         self.nightWakingsCount = nightWakingsCount
+        self.daytimeWakingsCount = daytimeWakingsCount
         self.nightSleepOnset = nightSleepOnset
         self.morningWakeTime = morningWakeTime
         self.hasCompletedSleepData = hasCompletedSleepData
@@ -223,6 +226,20 @@ public struct AnalyticsCycleSummary: Identifiable, Equatable, Sendable {
     }
 }
 
+/// Incomplete or ongoing event excluded from analytics calculations within the selected horizon.
+public struct ExcludedIncompleteEvent: Identifiable, Equatable, Sendable {
+    public let event: SleepEvent
+    public let reason: SleepEventIncompleteReason
+
+    public var id: UUID { event.id }
+    public var timestamp: Date { event.timestamp }
+
+    public init(event: SleepEvent, reason: SleepEventIncompleteReason) {
+        self.event = event
+        self.reason = reason
+    }
+}
+
 /// Complete aggregated Metrics & Analytics report for a selected horizon of 24-hour cycles.
 public struct SleepAnalyticsReport: Equatable, Sendable {
     public let configuration: SleepScheduleConfiguration
@@ -235,6 +252,8 @@ public struct SleepAnalyticsReport: Equatable, Sendable {
     public let emptyCyclesCount: Int
     /// Number of incomplete/orphaned events falling in the selected range that were excluded from calculations.
     public let excludedIncompleteEventsCount: Int
+    /// Detailed incomplete/ongoing events excluded from calculations in the selected range (most recent first).
+    public let excludedIncompleteEvents: [ExcludedIncompleteEvent]
 
     // 1. Duration Averages & Records
     public let averageTotalSleepDuration: TimeInterval?
@@ -250,6 +269,9 @@ public struct SleepAnalyticsReport: Equatable, Sendable {
     public let averageMorningWakeTime: TimeOfDayAverage?
     public let averageDaytimeWakeWindow: TimeInterval?
     public let daytimeWakeWindowsCount: Int
+    public let averageDaytimeWakingsPerCycle: Double?
+    public let averageNightWakingDuration: TimeInterval?
+    public let nightWakeWindowsCount: Int
 
     // 3. Frequency Averages
     public let averageNapsPerDay: Double?
@@ -262,6 +284,7 @@ public struct SleepAnalyticsReport: Equatable, Sendable {
         activeCyclesCount: Int,
         emptyCyclesCount: Int,
         excludedIncompleteEventsCount: Int,
+        excludedIncompleteEvents: [ExcludedIncompleteEvent] = [],
         averageTotalSleepDuration: TimeInterval?,
         averageNightSleepDuration: TimeInterval?,
         averageDaytimeSleepDuration: TimeInterval?,
@@ -273,6 +296,9 @@ public struct SleepAnalyticsReport: Equatable, Sendable {
         averageMorningWakeTime: TimeOfDayAverage?,
         averageDaytimeWakeWindow: TimeInterval?,
         daytimeWakeWindowsCount: Int,
+        averageDaytimeWakingsPerCycle: Double? = nil,
+        averageNightWakingDuration: TimeInterval? = nil,
+        nightWakeWindowsCount: Int = 0,
         averageNapsPerDay: Double?,
         averageNightWakingsPerCycle: Double?
     ) {
@@ -282,6 +308,7 @@ public struct SleepAnalyticsReport: Equatable, Sendable {
         self.activeCyclesCount = activeCyclesCount
         self.emptyCyclesCount = emptyCyclesCount
         self.excludedIncompleteEventsCount = excludedIncompleteEventsCount
+        self.excludedIncompleteEvents = excludedIncompleteEvents
         self.averageTotalSleepDuration = averageTotalSleepDuration
         self.averageNightSleepDuration = averageNightSleepDuration
         self.averageDaytimeSleepDuration = averageDaytimeSleepDuration
@@ -293,6 +320,9 @@ public struct SleepAnalyticsReport: Equatable, Sendable {
         self.averageMorningWakeTime = averageMorningWakeTime
         self.averageDaytimeWakeWindow = averageDaytimeWakeWindow
         self.daytimeWakeWindowsCount = daytimeWakeWindowsCount
+        self.averageDaytimeWakingsPerCycle = averageDaytimeWakingsPerCycle
+        self.averageNightWakingDuration = averageNightWakingDuration
+        self.nightWakeWindowsCount = nightWakeWindowsCount
         self.averageNapsPerDay = averageNapsPerDay
         self.averageNightWakingsPerCycle = averageNightWakingsPerCycle
     }
@@ -300,6 +330,16 @@ public struct SleepAnalyticsReport: Equatable, Sendable {
     /// True when no cycle in the selected range has valid completed sleep blocks.
     public var isEmpty: Bool {
         activeCyclesCount == 0
+    }
+
+    /// Real incomplete/orphaned events excluded from calculations (distinct from the active ongoing event).
+    public var realIncompleteEvents: [ExcludedIncompleteEvent] {
+        excludedIncompleteEvents.filter { !$0.reason.isOngoing }
+    }
+
+    /// Active ongoing sleep event inside the selected range, if any.
+    public var ongoingExcludedEvent: ExcludedIncompleteEvent? {
+        excludedIncompleteEvents.first { $0.reason.isOngoing }
     }
 
     public var totalCyclesCount: Int {

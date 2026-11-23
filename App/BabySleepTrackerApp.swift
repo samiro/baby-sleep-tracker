@@ -5,6 +5,7 @@ struct BabySleepTrackerApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: String = "dashboard"
     @State private var historyTargetDate: Date? = nil
+    @State private var historyTargetEventId: UUID? = nil
 
     var body: some Scene {
         WindowGroup {
@@ -15,16 +16,27 @@ struct BabySleepTrackerApp: App {
                     }
                     .tag("dashboard")
 
-                TimelineHistoryView(targetDate: $historyTargetDate)
+                TimelineHistoryView(
+                    targetDate: $historyTargetDate,
+                    targetEventId: $historyTargetEventId
+                )
                     .tabItem {
                         Label("Historial", systemImage: "clock.arrow.circlepath")
                     }
                     .tag("history")
 
-                MetricsAnalyticsView(onSelectHistoryDate: { date in
-                    historyTargetDate = date
-                    selectedTab = "history"
-                })
+                MetricsAnalyticsView(
+                    onSelectHistoryDate: { date in
+                        historyTargetEventId = nil
+                        historyTargetDate = date
+                        selectedTab = "history"
+                    },
+                    onSelectIncompleteEvent: { excluded in
+                        historyTargetEventId = excluded.event.id
+                        historyTargetDate = excluded.event.timestamp
+                        selectedTab = "history"
+                    }
+                )
                     .tabItem {
                         Label("Métricas", systemImage: "chart.bar.xaxis")
                     }

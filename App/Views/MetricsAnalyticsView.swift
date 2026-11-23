@@ -3,18 +3,24 @@ import Charts
 
 public struct MetricsAnalyticsView: View {
     private let onSelectHistoryDate: ((Date) -> Void)?
+    private let onSelectIncompleteEvent: ((ExcludedIncompleteEvent) -> Void)?
 
     @State private var selectedPreset: AnalyticsDateRangePreset = .last7Days
     @State private var customStartDate: Date = Date()
     @State private var customEndDate: Date = Date()
     @State private var showCustomRangeSheet = false
+    @State private var showIncompleteEventsSheet = false
 
     @State private var report: SleepAnalyticsReport?
     @State private var selectedCycleId: Date? = nil
     @State private var activeConfig: SleepScheduleConfiguration = SleepConfigurationManager.shared.configuration
 
-    public init(onSelectHistoryDate: ((Date) -> Void)? = nil) {
+    public init(
+        onSelectHistoryDate: ((Date) -> Void)? = nil,
+        onSelectIncompleteEvent: ((ExcludedIncompleteEvent) -> Void)? = nil
+    ) {
         self.onSelectHistoryDate = onSelectHistoryDate
+        self.onSelectIncompleteEvent = onSelectIncompleteEvent
     }
 
     private var selectedCycleSummary: AnalyticsCycleSummary? {
@@ -40,7 +46,6 @@ public struct MetricsAnalyticsView: View {
                                 stackedEvolutionChartCard(report: report)
                                 durationMetricsCard(report: report)
                                 scheduleConsistencyCard(report: report)
-                                frequencyMetricsCard(report: report)
                                 dataIntegrityFootnote(report: report)
                             }
                         } else {
@@ -66,6 +71,17 @@ public struct MetricsAnalyticsView: View {
                         reloadReport()
                     }
                 )
+            }
+            .sheet(isPresented: $showIncompleteEventsSheet) {
+                if let report {
+                    ExcludedIncompleteEventsSheet(
+                        events: report.realIncompleteEvents,
+                        onSelect: { excluded in
+                            showIncompleteEventsSheet = false
+                            navigateToIncompleteEvent(excluded)
+                        }
+                    )
+                }
             }
             .onAppear {
                 initializeCustomDatesIfNeeded()
@@ -424,12 +440,12 @@ public struct MetricsAnalyticsView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    // MARK: - Category 2: Schedule Trend & Consistency
+    // MARK: - Category 2: Schedules
 
     private func scheduleConsistencyCard(report: SleepAnalyticsReport) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionHeader(
-                title: "Horarios y Consistencia",
+                title: "Horarios",
                 icon: "clock.arrow.2.circlepath",
                 color: .purple
             )
@@ -438,83 +454,22 @@ public struct MetricsAnalyticsView: View {
                 ScheduleTrendRow(
                     icon: "moon.fill",
                     color: .indigo,
-                    title: "Hora promedio de dormir",
+                    title: "Hora de dormir",
                     average: report.averageNightSleepOnset
                 )
 
                 ScheduleTrendRow(
                     icon: "sunrise.fill",
                     color: .orange,
-                    title: "Despertar matutino promedio",
+                    title: "Hora despertar matutino",
                     average: report.averageMorningWakeTime
                 )
 
-                HStack(spacing: 12) {
-                    Image(systemName: "sun.haze.fill")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(.teal)
-                        .frame(width: 34, height: 34)
-                        .background(Color.teal.opacity(0.15))
-                        .clipShape(Circle())
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Ventana de vigilia promedio")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.primary)
-
-                        Text(
-                            report.daytimeWakeWindowsCount > 0
-                                ? "Tiempo despierto entre bloques (\(report.daytimeWakeWindowsCount) ventanas diurnas)"
-                                : "Sin ventanas diurnas completas en el periodo"
-                        )
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    Text(report.averageDaytimeWakeWindow.map(DayMetrics.formatDuration) ?? "--")
-                        .font(.headline)
-                        .fontWeight(.heavy)
-                        .monospacedDigit()
-                        .foregroundColor(.primary)
-                }
-                .padding(12)
-                .background(Color(.tertiarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-        }
-        .padding(16)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    // MARK: - Category 3: Frequency Averages
-
-    private func frequencyMetricsCard(report: SleepAnalyticsReport) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeader(
-                title: "Frecuencia",
-                icon: "chart.bar.fill",
-                color: .orange
-            )
-
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                AnalyticsMetricTile(
-                    icon: "sun.and.horizon.fill",
-                    color: .orange,
-                    title: "Siestas por día",
-                    value: SleepAnalyticsReport.formatFrequency(report.averageNapsPerDay),
-                    subtitle: "Bloques diurnos / ciclo"
-                )
-
-                AnalyticsMetricTile(
-                    icon: "moon.zzz.fill",
-                    color: .purple,
-                    title: "Despertares nocturnos",
-                    value: SleepAnalyticsReport.formatFrequency(report.averageNightWakingsPerCycle),
-                    subtitle: "Interrupciones / noche"
+                WakeWindowSummaryCard(
+                    averageDaytimeWakingsPerCycle: report.averageDaytimeWakingsPerCycle,
+                    averageDaytimeWakeWindow: report.averageDaytimeWakeWindow,
+                    averageNightWakingsPerCycle: report.averageNightWakingsPerCycle,
+                    averageNightWakingDuration: report.averageNightWakingDuration
                 )
             }
         }
@@ -543,18 +498,55 @@ public struct MetricsAnalyticsView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
-            if report.excludedIncompleteEventsCount > 0 {
-                HStack(spacing: 6) {
-                    Image(systemName: "info.circle.fill")
-                        .foregroundColor(.orange)
-                    Text("Se excluyeron \(report.excludedIncompleteEventsCount) evento(s) incompleto(s) o en curso.")
+            let realIncomplete = report.realIncompleteEvents
+            if !realIncomplete.isEmpty {
+                Button {
+                    handleRealIncompleteEventsTap(report: report)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "info.circle.fill")
+                            .foregroundColor(.orange)
+                        Text(
+                            realIncomplete.count == 1
+                                ? "Se excluyó 1 evento incompleto."
+                                : "Se excluyeron \(realIncomplete.count) eventos incompletos."
+                        )
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.primary)
+                        .underline()
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundColor(.orange)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.orange.opacity(0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color.orange.opacity(0.10))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .buttonStyle(.plain)
+            }
+
+            if let ongoingEvent = report.ongoingExcludedEvent {
+                Button {
+                    navigateToIncompleteEvent(ongoingEvent)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "clock.fill")
+                            .foregroundColor(.indigo)
+                        Text("No se tiene en cuenta el evento actual.")
+                            .font(.caption)
+                            .foregroundStyle(.primary)
+                            .underline()
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundColor(.indigo)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.indigo.opacity(0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .buttonStyle(.plain)
             }
 
             HStack(spacing: 10) {
@@ -598,24 +590,69 @@ public struct MetricsAnalyticsView: View {
     }
 
     private func dataIntegrityFootnote(report: SleepAnalyticsReport) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let realIncomplete = report.realIncompleteEvents
+        let ongoingEvent = report.ongoingExcludedEvent
+
+        return VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .top, spacing: 6) {
                 Image(systemName: "checkmark.shield")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .padding(.top, 1)
 
-                Text(footnoteText(for: report))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(baseFootnoteText(for: report))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if !realIncomplete.isEmpty {
+                        Button {
+                            handleRealIncompleteEventsTap(report: report)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(incompleteEventsLinkText(count: realIncomplete.count))
+                                    .font(.caption2)
+                                    .fontWeight(.semibold)
+                                    .underline()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 9, weight: .bold))
+                            }
+                            .foregroundColor(.indigo)
+                            .padding(.vertical, 2)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Abre el ciclo correspondiente en el historial para revisar el evento incompleto excluido.")
+                    }
+
+                    if let ongoingEvent {
+                        Button {
+                            navigateToIncompleteEvent(ongoingEvent)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text("No se tiene en cuenta el evento actual")
+                                    .font(.caption2)
+                                    .fontWeight(.semibold)
+                                    .underline()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 9, weight: .bold))
+                            }
+                            .foregroundColor(.indigo)
+                            .padding(.vertical, 2)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Abre el evento en curso en el historial.")
+                    }
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 4)
     }
 
-    private func footnoteText(for report: SleepAnalyticsReport) -> String {
+    private func baseFootnoteText(for report: SleepAnalyticsReport) -> String {
         var parts: [String] = [
             "Calculado solo con bloques completos (Se durmió → Se despertó) bajo el ciclo 24h configurado (\(report.configuration.nightStartTimeString)–\(report.configuration.dayStartTimeString))."
         ]
@@ -623,11 +660,39 @@ public struct MetricsAnalyticsView: View {
             let suffix = report.emptyCyclesCount == 1 ? "ciclo sin registros fue excluido" : "ciclos sin registros fueron excluidos"
             parts.append("\(report.emptyCyclesCount) \(suffix) de los promedios.")
         }
-        if report.excludedIncompleteEventsCount > 0 {
-            let suffix = report.excludedIncompleteEventsCount == 1 ? "evento incompleto excluido" : "eventos incompletos excluidos"
-            parts.append("\(report.excludedIncompleteEventsCount) \(suffix).")
-        }
         return parts.joined(separator: " ")
+    }
+
+    private func incompleteEventsLinkText(count: Int) -> String {
+        let suffix = count == 1 ? "evento incompleto excluido" : "eventos incompletos excluidos"
+        return "\(count) \(suffix)"
+    }
+
+    private func handleRealIncompleteEventsTap(report: SleepAnalyticsReport) {
+        let excluded = report.realIncompleteEvents
+        guard let first = excluded.first else { return }
+
+        if excluded.count == 1 {
+            navigateToIncompleteEvent(first)
+            return
+        }
+
+        let distinctCycleStarts = Set(
+            excluded.map { report.configuration.cycleRange(containing: $0.timestamp).start }
+        )
+        if distinctCycleStarts.count <= 1 {
+            navigateToIncompleteEvent(first)
+        } else {
+            showIncompleteEventsSheet = true
+        }
+    }
+
+    private func navigateToIncompleteEvent(_ excluded: ExcludedIncompleteEvent) {
+        if let onSelectIncompleteEvent {
+            onSelectIncompleteEvent(excluded)
+        } else {
+            onSelectHistoryDate?(excluded.timestamp)
+        }
     }
 
     private func sectionHeader(title: String, icon: String, color: Color) -> some View {
@@ -1044,56 +1109,345 @@ private struct ScheduleTrendRow: View {
     let average: TimeOfDayAverage?
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(color)
-                .frame(width: 34, height: 34)
-                .background(color.opacity(0.15))
-                .clipShape(Circle())
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(color)
+                    .frame(width: 26, height: 26)
+                    .background(color.opacity(0.15))
+                    .clipShape(Circle())
 
-            VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.subheadline)
                     .fontWeight(.semibold)
                     .foregroundColor(.primary)
-
-                if let average {
-                    HStack(spacing: 6) {
-                        Text(average.formattedVariation)
-                            .font(.caption2)
-                            .fontWeight(.semibold)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(color.opacity(0.14))
-                            .foregroundColor(color)
-                            .clipShape(Capsule())
-
-                        if average.sampleCount > 1 {
-                            Text("Rango \(average.formattedMinMaxRange)")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        }
-                    }
-                } else {
-                    Text("Sin registros en este periodo")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            Spacer()
+            if let average {
+                WeightedHStack(weights: [0.26, 0.30, 0.44], spacing: 6) {
+                    ScheduleMetricCell(
+                        label: "Promedio",
+                        value: average.formattedAverageTime,
+                        tint: color
+                    )
 
-            Text(average?.formattedAverageTime ?? "--:--")
-                .font(.headline)
-                .fontWeight(.heavy)
-                .monospacedDigit()
-                .foregroundColor(.primary)
+                    ScheduleMetricCell(
+                        label: "Variación",
+                        value: average.formattedVariation,
+                        tint: color
+                    )
+
+                    ScheduleMetricCell(
+                        label: "Rango",
+                        value: average.sampleCount > 1 ? average.formattedMinMaxRange : "—",
+                        tint: color
+                    )
+                }
+            } else {
+                Text("Sin registros en este periodo")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 4)
+            }
         }
         .padding(12)
         .background(Color(.tertiarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+private struct ScheduleMetricCell: View {
+    let label: String
+    let value: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .center, spacing: 3) {
+            Text(label)
+                .font(.caption2)
+                .fontWeight(.medium)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            Text(value)
+                .font(.system(.subheadline, design: .rounded).weight(.bold))
+                .monospacedDigit()
+                .foregroundColor(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(tint.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(tint.opacity(0.16), lineWidth: 1)
+        )
+    }
+}
+
+private struct WakeWindowSummaryCard: View {
+    let averageDaytimeWakingsPerCycle: Double?
+    let averageDaytimeWakeWindow: TimeInterval?
+    let averageNightWakingsPerCycle: Double?
+    let averageNightWakingDuration: TimeInterval?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "sun.haze.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.teal)
+                    .frame(width: 26, height: 26)
+                    .background(Color.teal.opacity(0.15))
+                    .clipShape(Circle())
+
+                Text("Ventana de vigilia promedio")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            VStack(spacing: 8) {
+                WakePeriodGroupRow(
+                    periodTitle: "Despertares diurnos",
+                    icon: "sun.max.fill",
+                    accentColor: .orange,
+                    countLabel: "Cantidad promedio día",
+                    countValue: SleepAnalyticsReport.formatFrequency(averageDaytimeWakingsPerCycle),
+                    durationLabel: "Duración promedio",
+                    durationValue: averageDaytimeWakeWindow.map(DayMetrics.formatDuration) ?? "--"
+                )
+
+                WakePeriodGroupRow(
+                    periodTitle: "Despertares nocturnos",
+                    icon: "moon.stars.fill",
+                    accentColor: .indigo,
+                    countLabel: "Cantidad promedio noche",
+                    countValue: SleepAnalyticsReport.formatFrequency(averageNightWakingsPerCycle),
+                    durationLabel: "Duración promedio",
+                    durationValue: averageNightWakingDuration.map(DayMetrics.formatDuration) ?? "--"
+                )
+            }
+        }
+        .padding(12)
+        .background(Color(.tertiarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+private struct WakePeriodGroupRow: View {
+    let periodTitle: String
+    let icon: String
+    let accentColor: Color
+    let countLabel: String
+    let countValue: String
+    let durationLabel: String
+    let durationValue: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(accentColor)
+
+                Text(periodTitle)
+                    .font(.caption)
+                    .fontWeight(.bold)
+                    .foregroundColor(accentColor)
+
+                Spacer()
+            }
+
+            WeightedHStack(weights: [0.55, 0.45], spacing: 0) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(countLabel)
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    Text(countValue)
+                        .font(.system(.subheadline, design: .rounded).weight(.bold))
+                        .monospacedDigit()
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.trailing, 8)
+                .overlay(alignment: .trailing) {
+                    Rectangle()
+                        .fill(accentColor.opacity(0.2))
+                        .frame(width: 1, height: 28)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(durationLabel)
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    Text(durationValue)
+                        .font(.system(.subheadline, design: .rounded).weight(.bold))
+                        .monospacedDigit()
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 10)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(accentColor.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(accentColor.opacity(0.18), lineWidth: 1)
+        )
+    }
+}
+
+private struct WeightedHStack: Layout {
+    let weights: [CGFloat]
+    let spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let totalWidth = proposal.width ?? 300
+        let totalSpacing = spacing * CGFloat(max(0, subviews.count - 1))
+        let availableWidth = max(0, totalWidth - totalSpacing)
+        let totalWeight = weights.prefix(subviews.count).reduce(0, +)
+        var maxHeight: CGFloat = 0
+
+        for (index, subview) in subviews.enumerated() {
+            let weight = index < weights.count ? weights[index] : 1
+            let width = totalWeight > 0 ? availableWidth * (weight / totalWeight) : 0
+            let size = subview.sizeThatFits(ProposedViewSize(width: width, height: proposal.height))
+            maxHeight = max(maxHeight, size.height)
+        }
+
+        return CGSize(width: totalWidth, height: maxHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let totalSpacing = spacing * CGFloat(max(0, subviews.count - 1))
+        let availableWidth = max(0, bounds.width - totalSpacing)
+        let totalWeight = weights.prefix(subviews.count).reduce(0, +)
+        var x = bounds.minX
+
+        for (index, subview) in subviews.enumerated() {
+            let weight = index < weights.count ? weights[index] : 1
+            let width = totalWeight > 0 ? availableWidth * (weight / totalWeight) : 0
+            subview.place(
+                at: CGPoint(x: x, y: bounds.minY),
+                proposal: ProposedViewSize(width: width, height: bounds.height)
+            )
+            x += width + spacing
+        }
+    }
+}
+
+// MARK: - Excluded Incomplete Events Sheet
+
+private struct ExcludedIncompleteEventsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let events: [ExcludedIncompleteEvent]
+    let onSelect: (ExcludedIncompleteEvent) -> Void
+
+    private static let dateTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "es_ES")
+        formatter.dateFormat = "d MMM, HH:mm"
+        return formatter
+    }()
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(events) { item in
+                        Button {
+                            onSelect(item)
+                            dismiss()
+                        } label: {
+                            HStack(spacing: 12) {
+                                let isOngoing = item.reason.isOngoing
+                                Image(systemName: isOngoing ? item.event.type.iconName : "exclamationmark.triangle.fill")
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(isOngoing ? .green : .orange)
+                                    .frame(width: 30, height: 30)
+                                    .background((isOngoing ? Color.green : Color.orange).opacity(0.15))
+                                    .clipShape(Circle())
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    HStack(spacing: 6) {
+                                        Text(item.event.type.displayName)
+                                            .font(.subheadline)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.primary)
+
+                                        Text(item.reason.badgeTitle)
+                                            .font(.caption2)
+                                            .fontWeight(.bold)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background((isOngoing ? Color.green : Color.orange).opacity(0.18))
+                                            .foregroundColor(isOngoing ? .green : .orange)
+                                            .clipShape(Capsule())
+                                    }
+
+                                    Text(Self.dateTimeFormatter.string(from: item.timestamp))
+                                        .font(.caption)
+                                        .monospacedDigit()
+                                        .foregroundStyle(.secondary)
+
+                                    if let explanation = item.reason.explanationMessage {
+                                        Text(explanation)
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                }
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } header: {
+                    Text("Selecciona un evento para abrir su ciclo en el historial")
+                }
+            }
+            .navigationTitle("Eventos excluidos")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cerrar") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 }
 
