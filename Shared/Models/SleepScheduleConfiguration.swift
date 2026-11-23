@@ -222,6 +222,21 @@ public struct SleepScheduleConfiguration: Codable, Equatable, Sendable {
         return SleepCycleRange(start: start, end: end, dayStart: cycleDayStart)
     }
 
+    /// Returns the non-positive cycle offset (`0` = current cycle, `-1` = previous cycle, etc.)
+    /// for the 24-hour cycle containing `targetDate` relative to `referenceDate`.
+    public func cycleOffset(
+        for targetDate: Date,
+        relativeTo referenceDate: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Int {
+        let currentCycle = cycleRange(containing: referenceDate, calendar: calendar)
+        let targetCycle = cycleRange(containing: targetDate, calendar: calendar)
+        let currentStartDay = calendar.startOfDay(for: currentCycle.start)
+        let targetStartDay = calendar.startOfDay(for: targetCycle.start)
+        let deltaDays = calendar.dateComponents([.day], from: currentStartDay, to: targetStartDay).day ?? 0
+        return min(0, deltaDays)
+    }
+
     /// Returns cross-cycle metadata when `interval` starts in one 24-hour cycle and extends into a later cycle,
     /// regardless of whether it is a nap or night sleep. Returns `nil` when the interval stays within a single cycle.
     public func crossCycleInfo(

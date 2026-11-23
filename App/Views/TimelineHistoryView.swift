@@ -1,6 +1,7 @@
 import SwiftUI
 
 public struct TimelineHistoryView: View {
+    @Binding private var targetDate: Date?
     @State private var cycleOffset: Int = 0
     @State private var activeConfig: SleepScheduleConfiguration = SleepConfigurationManager.shared.configuration
     @State private var events: [SleepEvent] = []
@@ -77,7 +78,9 @@ public struct TimelineHistoryView: View {
         return SleepEvent.clampedInitialTimestamp(shifted, now: now)
     }
 
-    public init() {}
+    public init(targetDate: Binding<Date?> = .constant(nil)) {
+        self._targetDate = targetDate
+    }
 
     public var body: some View {
         NavigationStack {
@@ -239,7 +242,12 @@ public struct TimelineHistoryView: View {
                 ShareSheet(items: shareItems)
             }
             .onAppear {
-                reloadData()
+                if !applyPendingTargetDateIfNeeded() {
+                    reloadData()
+                }
+            }
+            .onChange(of: targetDate) { _, _ in
+                _ = applyPendingTargetDateIfNeeded()
             }
             .onReceive(NotificationCenter.default.publisher(for: .sleepEventsDidChange)) { _ in
                 reloadData()
@@ -516,6 +524,17 @@ public struct TimelineHistoryView: View {
         guard nextOffset != cycleOffset else { return }
         cycleOffset = nextOffset
         reloadData()
+    }
+
+    @discardableResult
+    private func applyPendingTargetDateIfNeeded() -> Bool {
+        guard let date = targetDate else { return false }
+        let config = SleepConfigurationManager.shared.configuration
+        activeConfig = config
+        cycleOffset = config.cycleOffset(for: date)
+        targetDate = nil
+        reloadData()
+        return true
     }
 
     private func reloadData() {

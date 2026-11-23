@@ -2,6 +2,8 @@ import SwiftUI
 import Charts
 
 public struct MetricsAnalyticsView: View {
+    private let onSelectHistoryDate: ((Date) -> Void)?
+
     @State private var selectedPreset: AnalyticsDateRangePreset = .last7Days
     @State private var customStartDate: Date = Date()
     @State private var customEndDate: Date = Date()
@@ -11,7 +13,9 @@ public struct MetricsAnalyticsView: View {
     @State private var selectedCycleId: Date? = nil
     @State private var activeConfig: SleepScheduleConfiguration = SleepConfigurationManager.shared.configuration
 
-    public init() {}
+    public init(onSelectHistoryDate: ((Date) -> Void)? = nil) {
+        self.onSelectHistoryDate = onSelectHistoryDate
+    }
 
     private var selectedCycleSummary: AnalyticsCycleSummary? {
         guard let selectedCycleId, let report else { return nil }
@@ -184,31 +188,42 @@ public struct MetricsAnalyticsView: View {
         let yAxisUpper = max(4.0, ceil(maxCycleHours / 2.0) * 2.0 + 1.0)
 
         return VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Evolución por ciclo")
-                        .font(.headline)
-                        .foregroundColor(.primary)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Distribución diaria entre sueño nocturno y diurno")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                    Text("Distribución diaria entre sueño nocturno y diurno")
+                HStack(spacing: 4) {
+                    Image(systemName: "hand.tap")
+                        .font(.caption2)
+                    Text("Toca una barra para ver el detalle")
+                        .font(.caption2)
+                }
+                .foregroundStyle(.secondary)
+            }
+
+            if let avg = report.averageTotalSleepDuration {
+                HStack(spacing: 8) {
+                    Text("Media de sueño total por ciclo")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                }
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                Spacer()
+                    Spacer(minLength: 8)
 
-                if let avg = report.averageTotalSleepDuration {
-                    VStack(alignment: .trailing, spacing: 1) {
-                        Text("Media 24h")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        Text(DayMetrics.formatDuration(avg))
-                            .font(.caption)
-                            .fontWeight(.bold)
-                            .monospacedDigit()
-                            .foregroundColor(.indigo)
-                    }
+                    Text(DayMetrics.formatDuration(avg))
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                        .monospacedDigit()
+                        .foregroundColor(.indigo)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color(.tertiarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
 
             // Selected cycle callout (if user taps/scrubs a bar)
@@ -282,8 +297,8 @@ public struct MetricsAnalyticsView: View {
             }
             .frame(height: 210)
 
-            // Custom Legend & Hint
-            HStack(spacing: 16) {
+            // Custom Legend
+            HStack(spacing: 14) {
                 legendDot(color: .indigo, label: "Nocturno")
                 legendDot(color: .orange, label: "Diurno (siestas)")
 
@@ -298,20 +313,7 @@ public struct MetricsAnalyticsView: View {
                     }
                 }
 
-                Spacer()
-
-                if selectedCycleId != nil {
-                    Button("Limpiar") {
-                        selectedCycleId = nil
-                    }
-                    .font(.caption2)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.indigo)
-                } else {
-                    Text("Toca una barra")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
+                Spacer(minLength: 0)
             }
         }
         .padding(16)
@@ -320,7 +322,7 @@ public struct MetricsAnalyticsView: View {
     }
 
     private func inspectedCycleBanner(_ summary: AnalyticsCycleSummary) -> some View {
-        HStack(spacing: 10) {
+        HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Ciclo \(summary.cycle.formattedRangeLabel())")
                     .font(.caption2)
@@ -339,7 +341,14 @@ public struct MetricsAnalyticsView: View {
                 }
             }
 
-            Spacer()
+            Spacer(minLength: 4)
+
+            Button("Limpiar") {
+                selectedCycleId = nil
+            }
+            .font(.caption2)
+            .fontWeight(.semibold)
+            .foregroundColor(.indigo)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
@@ -358,64 +367,56 @@ public struct MetricsAnalyticsView: View {
         }
     }
 
-    // MARK: - Category 1: Duration Averages & Records
+    // MARK: - Category 1: Duration Averages & Night Record
 
     private func durationMetricsCard(report: SleepAnalyticsReport) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let twoColumns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+
+        return VStack(alignment: .leading, spacing: 12) {
             sectionHeader(
-                title: "Duración y Récords",
+                title: "Duración promedio del sueño",
                 icon: "clock.fill",
                 color: .indigo
             )
 
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            LazyVGrid(columns: twoColumns, spacing: 10) {
+                // Caja 1: Promedio sueño nocturno (same icon & color as 4x2 widget total sleep)
                 AnalyticsMetricTile(
-                    icon: "bed.double.fill",
+                    icon: MediumWidgetSnapshot.nightSleepIconName,
                     color: .indigo,
-                    title: "Sueño total (24h)",
-                    value: report.averageTotalSleepDuration.map(DayMetrics.formatDuration) ?? "--",
-                    subtitle: "Promedio por ciclo"
-                )
-
-                AnalyticsMetricTile(
-                    icon: "moon.stars.fill",
-                    color: .purple,
-                    title: "Sueño nocturno",
+                    title: "Promedio sueño nocturno",
                     value: report.averageNightSleepDuration.map(DayMetrics.formatDuration) ?? "--",
-                    subtitle: "Promedio por noche"
+                    subtitle: nil
                 )
 
+                // Caja 2: Promedio sueño diurno (same icon & color as 4x2 widget total sleep)
                 AnalyticsMetricTile(
-                    icon: "sun.max.fill",
-                    color: .orange,
-                    title: "Sueño diurno",
+                    title: "Promedio sueño diurno",
                     value: report.averageDaytimeSleepDuration.map(DayMetrics.formatDuration) ?? "--",
-                    subtitle: "Promedio en siestas"
-                )
+                    subtitle: nil
+                ) {
+                    DaytimeSleepWidgetBadgeIcon()
+                }
 
+                // Caja 3: Sueño total promedio por ciclo 24h
                 AnalyticsMetricTile(
-                    icon: "timer",
-                    color: .teal,
-                    title: "Promedio / siesta",
-                    value: report.averageNapDuration.map(DayMetrics.formatDuration) ?? "--",
-                    subtitle: report.totalNapsEvaluated > 0 ? "\(report.totalNapsEvaluated) siestas" : "Sin siestas"
-                )
+                    title: "Sueño total promedio por ciclo 24h",
+                    value: report.averageTotalSleepDuration.map(DayMetrics.formatDuration) ?? "--",
+                    subtitle: nil
+                ) {
+                    CycleDayNightBadgeIcon()
+                }
 
-                AnalyticsMetricTile(
-                    icon: "trophy.fill",
-                    color: .indigo,
-                    title: "Récord nocturno",
-                    value: report.longestNightStretch?.formattedDuration ?? "--",
-                    subtitle: report.longestNightStretch.map { "Tramo · \($0.formattedDateLabel())" } ?? "Sin registros"
+                // Caja 4: Promedio de siestas (cantidad y duración en el mismo nivel de jerarquía)
+                NapAverageMetricTile(
+                    averageCountText: SleepAnalyticsReport.formatFrequency(report.averageNapsPerDay),
+                    averageDurationText: report.averageNapDuration.map(DayMetrics.formatDuration) ?? "--"
                 )
+            }
 
-                AnalyticsMetricTile(
-                    icon: "sparkles",
-                    color: .orange,
-                    title: "Récord diurno",
-                    value: report.longestNap?.formattedDuration ?? "--",
-                    subtitle: report.longestNap.map { "Siesta · \($0.formattedDateLabel())" } ?? "Sin siestas"
-                )
+            // Subtle, slim full-width night record tile (2 text lines, no daytime record)
+            SubtleNightRecordTile(record: report.longestNightStretch) { record in
+                onSelectHistoryDate?(record.startTime)
             }
         }
         .padding(16)
@@ -779,29 +780,97 @@ public struct MetricsAnalyticsView: View {
 
 // MARK: - Reusable Subviews
 
-private struct AnalyticsMetricTile: View {
+private struct StandardMetricBadgeIcon: View {
     let icon: String
     let color: Color
+
+    var body: some View {
+        Image(systemName: icon)
+            .font(.system(size: 13, weight: .bold))
+            .foregroundColor(color)
+            .frame(width: 26, height: 26)
+            .background(color.opacity(0.15))
+            .clipShape(Circle())
+    }
+}
+
+private struct DaytimeSleepWidgetBadgeIcon: View {
+    private static let daytimeSleepColor = Color(red: 0.78, green: 0.56, blue: 0.04)
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Image(systemName: MediumWidgetSnapshot.daytimeSleepIconName)
+                .font(.system(size: 12, weight: .semibold))
+                .padding(.trailing, 4)
+                .padding(.top, 2)
+            Image(systemName: "zzz")
+                .font(.system(size: 6.5, weight: .heavy))
+                .offset(x: 1, y: -1)
+        }
+        .foregroundStyle(Self.daytimeSleepColor)
+        .frame(width: 26, height: 26)
+        .background(Self.daytimeSleepColor.opacity(0.15))
+        .clipShape(Circle())
+    }
+}
+
+private struct CycleDayNightBadgeIcon: View {
+    private static let daytimeSleepColor = Color(red: 0.78, green: 0.56, blue: 0.04)
+
+    var body: some View {
+        ZStack {
+            Image(systemName: "moon.fill")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.indigo)
+                .offset(x: -4, y: -3.5)
+
+            Image(systemName: "sun.max.fill")
+                .font(.system(size: 10.5, weight: .bold))
+                .foregroundStyle(Self.daytimeSleepColor)
+                .offset(x: 4, y: 3.5)
+        }
+        .frame(width: 26, height: 26)
+        .background(
+            LinearGradient(
+                colors: [Color.indigo.opacity(0.16), Self.daytimeSleepColor.opacity(0.16)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .clipShape(Circle())
+    }
+}
+
+private struct AnalyticsMetricTile<IconContent: View>: View {
     let title: String
     let value: String
-    let subtitle: String
+    let subtitle: String?
+    let iconContent: IconContent
+
+    init(
+        title: String,
+        value: String,
+        subtitle: String? = nil,
+        @ViewBuilder icon: () -> IconContent
+    ) {
+        self.title = title
+        self.value = value
+        self.subtitle = subtitle
+        self.iconContent = icon()
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(color)
-                    .frame(width: 26, height: 26)
-                    .background(color.opacity(0.15))
-                    .clipShape(Circle())
+                iconContent
 
                 Text(title)
                     .font(.caption)
                     .fontWeight(.medium)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .lineLimit(3)
                     .minimumScaleFactor(0.85)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Text(value)
@@ -811,15 +880,160 @@ private struct AnalyticsMetricTile: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
 
-            Text(subtitle)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            if let subtitle {
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(12)
         .background(Color(.tertiarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+private extension AnalyticsMetricTile where IconContent == StandardMetricBadgeIcon {
+    init(
+        icon: String,
+        color: Color,
+        title: String,
+        value: String,
+        subtitle: String? = nil
+    ) {
+        self.init(title: title, value: value, subtitle: subtitle) {
+            StandardMetricBadgeIcon(icon: icon, color: color)
+        }
+    }
+}
+
+private struct NapAverageMetricTile: View {
+    let averageCountText: String
+    let averageDurationText: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                StandardMetricBadgeIcon(icon: "timer", color: .teal)
+
+                Text("Promedio de siestas")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(averageCountText)
+                        .font(.system(size: 18, weight: .heavy, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+
+                    Text("por día")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Rectangle()
+                    .fill(Color.secondary.opacity(0.2))
+                    .frame(width: 1, height: 28)
+                    .padding(.top, 2)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(averageDurationText)
+                        .font(.system(size: 18, weight: .heavy, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+
+                    Text("duración")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(12)
+        .background(Color(.tertiarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+private struct SubtleNightRecordTile: View {
+    let record: SleepDurationRecord?
+    let onSelect: (SleepDurationRecord) -> Void
+
+    var body: some View {
+        if let record {
+            Button {
+                onSelect(record)
+            } label: {
+                tileContent(record: record)
+            }
+            .buttonStyle(.plain)
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Récord nocturno \(record.formattedDuration), \(record.formattedDateLabel())")
+            .accessibilityHint("Abre el historial correspondiente a esta fecha")
+        } else {
+            tileContent(record: nil)
+        }
+    }
+
+    private func tileContent(record: SleepDurationRecord?) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "trophy")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.indigo.opacity(0.75))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Récord nocturno")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                Text(record.map { "Registrado el \($0.formattedDateLabel())" } ?? "Sin registros")
+                    .font(.caption2)
+                    .foregroundStyle(record != nil ? Color.indigo.opacity(0.85) : Color.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            HStack(spacing: 5) {
+                Text(record?.formattedDuration ?? "--")
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.primary.opacity(0.85))
+                    .lineLimit(1)
+
+                if record != nil {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(Color(.tertiarySystemBackground).opacity(0.55))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.indigo.opacity(0.18), lineWidth: 1)
+        )
     }
 }
 
