@@ -1,0 +1,1004 @@
+import SwiftUI
+import Charts
+
+public struct MetricsAnalyticsView: View {
+    @State private var selectedPreset: AnalyticsDateRangePreset = .last7Days
+    @State private var customStartDate: Date = Date()
+    @State private var customEndDate: Date = Date()
+    @State private var showCustomRangeSheet = false
+
+    @State private var report: SleepAnalyticsReport?
+    @State private var selectedCycleId: Date? = nil
+    @State private var activeConfig: SleepScheduleConfiguration = SleepConfigurationManager.shared.configuration
+
+    public init() {}
+
+    private var selectedCycleSummary: AnalyticsCycleSummary? {
+        guard let selectedCycleId, let report else { return nil }
+        return report.cycles.first { $0.id == selectedCycleId }
+    }
+
+    public var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Pinned Date / Cycle Range Selector Header
+                pinnedRangeHeader
+
+                Divider()
+
+                // Scrollable Analytics Content
+                ScrollView {
+                    VStack(spacing: 16) {
+                        if let report {
+                            if report.isEmpty {
+                                emptyStateView(report: report)
+                            } else {
+                                stackedEvolutionChartCard(report: report)
+                                durationMetricsCard(report: report)
+                                scheduleConsistencyCard(report: report)
+                                frequencyMetricsCard(report: report)
+                                dataIntegrityFootnote(report: report)
+                            }
+                        } else {
+                            ProgressView("Calculando métricas...")
+                                .padding(.top, 48)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+                    .padding(.bottom, 32)
+                }
+            }
+            .navigationTitle("Métricas")
+            .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $showCustomRangeSheet) {
+                CustomCycleRangeSheet(
+                    startDate: $customStartDate,
+                    endDate: $customEndDate,
+                    configuration: activeConfig,
+                    onApply: {
+                        selectedPreset = .custom
+                        selectedCycleId = nil
+                        reloadReport()
+                    }
+                )
+            }
+            .onAppear {
+                initializeCustomDatesIfNeeded()
+                reloadReport()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .sleepEventsDidChange)) { _ in
+                reloadReport()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .sleepConfigurationDidChange)) { _ in
+                reloadReport()
+            }
+        }
+    }
+
+    // MARK: - Pinned Range Selector Header
+
+    private var pinnedRangeHeader: some View {
+        VStack(spacing: 10) {
+            // Preset selector pills
+            HStack(spacing: 6) {
+                ForEach(AnalyticsDateRangePreset.allCases) { preset in
+                    let isSelected = selectedPreset == preset
+                    Button {
+                        handlePresetSelection(preset)
+                    } label: {
+                        Text(preset.shortTitle)
+                            .font(.caption)
+                            .fontWeight(isSelected ? .bold : .medium)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 6)
+                            .foregroundColor(isSelected ? .white : .primary)
+                            .background(
+                                isSelected
+                                    ? Color.indigo
+                                    : Color(.secondarySystemBackground)
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            // Exact cycle window banner + custom edit trigger
+            HStack(spacing: 8) {
+                Image(systemName: "calendar.badge.clock")
+                    .font(.caption)
+                    .foregroundColor(.indigo)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    if let report {
+                        Text(report.formattedCycleRangeHeader())
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+
+                        Text(cycleCoverageSubtitle(for: report))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Ciclos de 24 horas")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer()
+
+                if selectedPreset == .custom {
+                    Button {
+                        showCustomRangeSheet = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "slider.horizontal.3")
+                            Text("Editar")
+                        }
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .foregroundColor(.indigo)
+                        .background(Color.indigo.opacity(0.12))
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(Color(.secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color(.systemBackground))
+    }
+
+    private func cycleCoverageSubtitle(for report: SleepAnalyticsReport) -> String {
+        let cycleLabel = "Ciclo 24h (\(report.configuration.nightStartTimeString)–\(report.configuration.dayStartTimeString))"
+        if report.activeCyclesCount == 0 {
+            return "\(report.totalCyclesCount) ciclos · Sin registros completos"
+        } else if report.emptyCyclesCount > 0 {
+            return "\(report.activeCyclesCount) de \(report.totalCyclesCount) ciclos con datos · \(cycleLabel)"
+        } else {
+            return "\(report.totalCyclesCount) ciclos evaluados · \(cycleLabel)"
+        }
+    }
+
+    // MARK: - Stacked Bar Chart Card
+
+    private func stackedEvolutionChartCard(report: SleepAnalyticsReport) -> some View {
+        let maxCycleHours = max(
+            report.cycles.map(\.totalSleepHours).max() ?? 0,
+            (report.averageTotalSleepDuration ?? 0) / 3600.0
+        )
+        let yAxisUpper = max(4.0, ceil(maxCycleHours / 2.0) * 2.0 + 1.0)
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Evolución por ciclo")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+
+                    Text("Distribución diaria entre sueño nocturno y diurno")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                if let avg = report.averageTotalSleepDuration {
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text("Media 24h")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text(DayMetrics.formatDuration(avg))
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .monospacedDigit()
+                            .foregroundColor(.indigo)
+                    }
+                }
+            }
+
+            // Selected cycle callout (if user taps/scrubs a bar)
+            if let inspected = selectedCycleSummary {
+                inspectedCycleBanner(inspected)
+            }
+
+            // Stacked Bar Chart
+            let entries = buildChartEntries(from: report.cycles)
+            Chart {
+                ForEach(entries) { entry in
+                    BarMark(
+                        x: .value("Ciclo", entry.axisDay, unit: .day),
+                        y: .value("Horas", entry.hours)
+                    )
+                    .foregroundStyle(by: .value("Tipo", entry.category.rawValue))
+                    .cornerRadius(4)
+                    .opacity(selectedCycleId == nil || selectedCycleId == entry.cycleStart ? 1.0 : 0.45)
+                }
+
+                if let avgTotal = report.averageTotalSleepDuration, avgTotal > 0 {
+                    RuleMark(y: .value("Promedio", avgTotal / 3600.0))
+                        .foregroundStyle(Color.secondary.opacity(0.65))
+                        .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [4, 4]))
+                }
+            }
+            .chartForegroundStyleScale([
+                ChartSleepCategory.night.rawValue: Color.indigo,
+                ChartSleepCategory.day.rawValue: Color.orange
+            ])
+            .chartLegend(.hidden)
+            .chartYScale(domain: 0...yAxisUpper)
+            .chartYAxis {
+                AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
+                        .foregroundStyle(Color.secondary.opacity(0.25))
+                    AxisValueLabel {
+                        if let hours = value.as(Double.self) {
+                            Text("\(Int(hours))h")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                    }
+                }
+            }
+            .chartXAxis {
+                AxisMarks(values: axisTickDates(for: report.cycles)) { value in
+                    AxisValueLabel(centered: true) {
+                        if let date = value.as(Date.self) {
+                            Text(shortAxisLabel(for: date, totalCycles: report.cycles.count))
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .chartOverlay { proxy in
+                GeometryReader { geometry in
+                    Rectangle()
+                        .fill(Color.clear)
+                        .contentShape(Rectangle())
+                        .onTapGesture { location in
+                            guard let plotFrame = proxy.plotFrame else { return }
+                            let origin = geometry[plotFrame].origin
+                            let relativeX = location.x - origin.x
+                            guard let tappedDate: Date = proxy.value(atX: relativeX) else { return }
+                            selectNearestCycle(to: tappedDate, in: report.cycles)
+                        }
+                }
+            }
+            .frame(height: 210)
+
+            // Custom Legend & Hint
+            HStack(spacing: 16) {
+                legendDot(color: .indigo, label: "Nocturno")
+                legendDot(color: .orange, label: "Diurno (siestas)")
+
+                if report.averageTotalSleepDuration != nil {
+                    HStack(spacing: 4) {
+                        Rectangle()
+                            .fill(Color.secondary.opacity(0.65))
+                            .frame(width: 12, height: 1.5)
+                        Text("Media")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer()
+
+                if selectedCycleId != nil {
+                    Button("Limpiar") {
+                        selectedCycleId = nil
+                    }
+                    .font(.caption2)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.indigo)
+                } else {
+                    Text("Toca una barra")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .padding(16)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func inspectedCycleBanner(_ summary: AnalyticsCycleSummary) -> some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Ciclo \(summary.cycle.formattedRangeLabel())")
+                    .font(.caption2)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+
+                if summary.hasCompletedSleepData {
+                    Text("Total \(DayMetrics.formatDuration(summary.totalSleepDuration)) · Noche \(DayMetrics.formatDuration(summary.nightSleepDuration)) · Día \(DayMetrics.formatDuration(summary.daytimeSleepDuration))")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                } else {
+                    Text("Sin bloques completos registrados en este ciclo")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.indigo.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func legendDot(color: Color, label: String) -> some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(color)
+                .frame(width: 8, height: 8)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - Category 1: Duration Averages & Records
+
+    private func durationMetricsCard(report: SleepAnalyticsReport) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader(
+                title: "Duración y Récords",
+                icon: "clock.fill",
+                color: .indigo
+            )
+
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                AnalyticsMetricTile(
+                    icon: "bed.double.fill",
+                    color: .indigo,
+                    title: "Sueño total (24h)",
+                    value: report.averageTotalSleepDuration.map(DayMetrics.formatDuration) ?? "--",
+                    subtitle: "Promedio por ciclo"
+                )
+
+                AnalyticsMetricTile(
+                    icon: "moon.stars.fill",
+                    color: .purple,
+                    title: "Sueño nocturno",
+                    value: report.averageNightSleepDuration.map(DayMetrics.formatDuration) ?? "--",
+                    subtitle: "Promedio por noche"
+                )
+
+                AnalyticsMetricTile(
+                    icon: "sun.max.fill",
+                    color: .orange,
+                    title: "Sueño diurno",
+                    value: report.averageDaytimeSleepDuration.map(DayMetrics.formatDuration) ?? "--",
+                    subtitle: "Promedio en siestas"
+                )
+
+                AnalyticsMetricTile(
+                    icon: "timer",
+                    color: .teal,
+                    title: "Promedio / siesta",
+                    value: report.averageNapDuration.map(DayMetrics.formatDuration) ?? "--",
+                    subtitle: report.totalNapsEvaluated > 0 ? "\(report.totalNapsEvaluated) siestas" : "Sin siestas"
+                )
+
+                AnalyticsMetricTile(
+                    icon: "trophy.fill",
+                    color: .indigo,
+                    title: "Récord nocturno",
+                    value: report.longestNightStretch?.formattedDuration ?? "--",
+                    subtitle: report.longestNightStretch.map { "Tramo · \($0.formattedDateLabel())" } ?? "Sin registros"
+                )
+
+                AnalyticsMetricTile(
+                    icon: "sparkles",
+                    color: .orange,
+                    title: "Récord diurno",
+                    value: report.longestNap?.formattedDuration ?? "--",
+                    subtitle: report.longestNap.map { "Siesta · \($0.formattedDateLabel())" } ?? "Sin siestas"
+                )
+            }
+        }
+        .padding(16)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    // MARK: - Category 2: Schedule Trend & Consistency
+
+    private func scheduleConsistencyCard(report: SleepAnalyticsReport) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader(
+                title: "Horarios y Consistencia",
+                icon: "clock.arrow.2.circlepath",
+                color: .purple
+            )
+
+            VStack(spacing: 10) {
+                ScheduleTrendRow(
+                    icon: "moon.fill",
+                    color: .indigo,
+                    title: "Hora promedio de dormir",
+                    average: report.averageNightSleepOnset
+                )
+
+                ScheduleTrendRow(
+                    icon: "sunrise.fill",
+                    color: .orange,
+                    title: "Despertar matutino promedio",
+                    average: report.averageMorningWakeTime
+                )
+
+                HStack(spacing: 12) {
+                    Image(systemName: "sun.haze.fill")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.teal)
+                        .frame(width: 34, height: 34)
+                        .background(Color.teal.opacity(0.15))
+                        .clipShape(Circle())
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Ventana de vigilia promedio")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+
+                        Text(
+                            report.daytimeWakeWindowsCount > 0
+                                ? "Tiempo despierto entre bloques (\(report.daytimeWakeWindowsCount) ventanas diurnas)"
+                                : "Sin ventanas diurnas completas en el periodo"
+                        )
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Text(report.averageDaytimeWakeWindow.map(DayMetrics.formatDuration) ?? "--")
+                        .font(.headline)
+                        .fontWeight(.heavy)
+                        .monospacedDigit()
+                        .foregroundColor(.primary)
+                }
+                .padding(12)
+                .background(Color(.tertiarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+        }
+        .padding(16)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    // MARK: - Category 3: Frequency Averages
+
+    private func frequencyMetricsCard(report: SleepAnalyticsReport) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader(
+                title: "Frecuencia",
+                icon: "chart.bar.fill",
+                color: .orange
+            )
+
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                AnalyticsMetricTile(
+                    icon: "sun.and.horizon.fill",
+                    color: .orange,
+                    title: "Siestas por día",
+                    value: SleepAnalyticsReport.formatFrequency(report.averageNapsPerDay),
+                    subtitle: "Bloques diurnos / ciclo"
+                )
+
+                AnalyticsMetricTile(
+                    icon: "moon.zzz.fill",
+                    color: .purple,
+                    title: "Despertares nocturnos",
+                    value: SleepAnalyticsReport.formatFrequency(report.averageNightWakingsPerCycle),
+                    subtitle: "Interrupciones / noche"
+                )
+            }
+        }
+        .padding(16)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    // MARK: - Empty State & Footnote
+
+    private func emptyStateView(report: SleepAnalyticsReport) -> some View {
+        VStack(spacing: 14) {
+            Image(systemName: "chart.bar.doc.horizontal")
+                .font(.system(size: 46, weight: .semibold))
+                .foregroundColor(.indigo.opacity(0.75))
+                .padding(18)
+                .background(Color.indigo.opacity(0.10))
+                .clipShape(Circle())
+
+            Text("Sin datos suficientes en este periodo")
+                .font(.headline)
+                .multilineTextAlignment(.center)
+
+            Text("No hay bloques de sueño completos (Se durmió → Se despertó) dentro de los ciclos seleccionados para calcular estadísticas.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            if report.excludedIncompleteEventsCount > 0 {
+                HStack(spacing: 6) {
+                    Image(systemName: "info.circle.fill")
+                        .foregroundColor(.orange)
+                    Text("Se excluyeron \(report.excludedIncompleteEventsCount) evento(s) incompleto(s) o en curso.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.orange.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+
+            HStack(spacing: 10) {
+                if selectedPreset != .last30Days {
+                    Button {
+                        handlePresetSelection(.last30Days)
+                    } label: {
+                        Text("Ver último mes")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .foregroundColor(.white)
+                            .background(Color.indigo)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Button {
+                    showCustomRangeSheet = true
+                } label: {
+                    Text("Elegir rango")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .foregroundColor(.indigo)
+                        .background(Color.indigo.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 36)
+        .padding(.horizontal, 20)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    private func dataIntegrityFootnote(report: SleepAnalyticsReport) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "checkmark.shield")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 1)
+
+                Text(footnoteText(for: report))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 4)
+    }
+
+    private func footnoteText(for report: SleepAnalyticsReport) -> String {
+        var parts: [String] = [
+            "Calculado solo con bloques completos (Se durmió → Se despertó) bajo el ciclo 24h configurado (\(report.configuration.nightStartTimeString)–\(report.configuration.dayStartTimeString))."
+        ]
+        if report.emptyCyclesCount > 0 {
+            let suffix = report.emptyCyclesCount == 1 ? "ciclo sin registros fue excluido" : "ciclos sin registros fueron excluidos"
+            parts.append("\(report.emptyCyclesCount) \(suffix) de los promedios.")
+        }
+        if report.excludedIncompleteEventsCount > 0 {
+            let suffix = report.excludedIncompleteEventsCount == 1 ? "evento incompleto excluido" : "eventos incompletos excluidos"
+            parts.append("\(report.excludedIncompleteEventsCount) \(suffix).")
+        }
+        return parts.joined(separator: " ")
+    }
+
+    private func sectionHeader(title: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.subheadline.weight(.bold))
+                .foregroundColor(color)
+            Text(title)
+                .font(.headline)
+                .foregroundColor(.primary)
+            Spacer()
+        }
+    }
+
+    // MARK: - Chart Helpers
+
+    private enum ChartSleepCategory: String, CaseIterable {
+        case night = "Nocturno"
+        case day = "Diurno"
+    }
+
+    private struct ChartSleepEntry: Identifiable {
+        let id: String
+        let cycleStart: Date
+        let axisDay: Date
+        let category: ChartSleepCategory
+        let hours: Double
+    }
+
+    private func buildChartEntries(from cycles: [AnalyticsCycleSummary]) -> [ChartSleepEntry] {
+        let calendar = Calendar.current
+        var entries: [ChartSleepEntry] = []
+        entries.reserveCapacity(cycles.count * 2)
+        for cycle in cycles {
+            let baseId = "\(Int(cycle.cycle.start.timeIntervalSince1970))"
+            let axisDay = calendar.startOfDay(for: cycle.cycle.start)
+            entries.append(
+                ChartSleepEntry(
+                    id: "\(baseId)-night",
+                    cycleStart: cycle.cycle.start,
+                    axisDay: axisDay,
+                    category: .night,
+                    hours: cycle.nightSleepHours
+                )
+            )
+            entries.append(
+                ChartSleepEntry(
+                    id: "\(baseId)-day",
+                    cycleStart: cycle.cycle.start,
+                    axisDay: axisDay,
+                    category: .day,
+                    hours: cycle.daytimeSleepHours
+                )
+            )
+        }
+        return entries
+    }
+
+    private func axisTickDates(for cycles: [AnalyticsCycleSummary]) -> [Date] {
+        guard !cycles.isEmpty else { return [] }
+        let calendar = Calendar.current
+        let axisDays = cycles.map { calendar.startOfDay(for: $0.cycle.start) }
+        let count = axisDays.count
+        if count <= 7 {
+            return axisDays
+        }
+        let targetTicks = 5
+        let strideStep = max(1, (count - 1) / (targetTicks - 1))
+        var ticks: [Date] = []
+        var idx = 0
+        while idx < count {
+            ticks.append(axisDays[idx])
+            idx += strideStep
+        }
+        if let last = axisDays.last, ticks.last != last {
+            if ticks.count >= 2 {
+                ticks[ticks.count - 1] = last
+            } else {
+                ticks.append(last)
+            }
+        }
+        return ticks
+    }
+
+    private func shortAxisLabel(for date: Date, totalCycles: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "es_ES")
+        formatter.dateFormat = totalCycles <= 7 ? "d MMM" : "d/M"
+        return formatter.string(from: date)
+    }
+
+    private func selectNearestCycle(to tappedDate: Date, in cycles: [AnalyticsCycleSummary]) {
+        let calendar = Calendar.current
+        let tappedDay = calendar.startOfDay(for: tappedDate)
+        let matched = cycles.first {
+            calendar.isDate($0.cycle.start, inSameDayAs: tappedDay)
+        } ?? cycles.min(by: {
+            abs(calendar.startOfDay(for: $0.cycle.start).timeIntervalSince(tappedDay))
+                < abs(calendar.startOfDay(for: $1.cycle.start).timeIntervalSince(tappedDay))
+        })
+        guard let matched else { return }
+        if selectedCycleId == matched.id {
+            selectedCycleId = nil
+        } else {
+            selectedCycleId = matched.id
+        }
+    }
+
+    // MARK: - Actions & Data Loading
+
+    private func initializeCustomDatesIfNeeded() {
+        let config = SleepConfigurationManager.shared.configuration
+        activeConfig = config
+        if report == nil {
+            let currentCycle = config.cycleRange(offset: 0)
+            let weekAgoCycle = config.cycleRange(offset: -6)
+            customStartDate = weekAgoCycle.start
+            customEndDate = currentCycle.start
+        }
+    }
+
+    private func handlePresetSelection(_ preset: AnalyticsDateRangePreset) {
+        if preset == .custom {
+            if selectedPreset != .custom, let first = report?.cycles.first?.cycle.start, let last = report?.cycles.last?.cycle.start {
+                customStartDate = first
+                customEndDate = last
+            }
+            showCustomRangeSheet = true
+        } else {
+            selectedPreset = preset
+            selectedCycleId = nil
+            reloadReport()
+        }
+    }
+
+    private func reloadReport() {
+        let config = SleepConfigurationManager.shared.configuration
+        activeConfig = config
+        report = try? SleepAnalyticsService.shared.generateReport(
+            preset: selectedPreset,
+            customStartDate: selectedPreset == .custom ? customStartDate : nil,
+            customEndDate: selectedPreset == .custom ? customEndDate : nil,
+            configuration: config
+        )
+        if let selectedCycleId, let report, !report.cycles.contains(where: { $0.id == selectedCycleId }) {
+            self.selectedCycleId = nil
+        }
+    }
+}
+
+// MARK: - Reusable Subviews
+
+private struct AnalyticsMetricTile: View {
+    let icon: String
+    let color: Color
+    let title: String
+    let value: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(color)
+                    .frame(width: 26, height: 26)
+                    .background(color.opacity(0.15))
+                    .clipShape(Circle())
+
+                Text(title)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+            }
+
+            Text(value)
+                .font(.system(size: 20, weight: .heavy, design: .rounded))
+                .monospacedDigit()
+                .foregroundColor(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+
+            Text(subtitle)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color(.tertiarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+private struct ScheduleTrendRow: View {
+    let icon: String
+    let color: Color
+    let title: String
+    let average: TimeOfDayAverage?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(color)
+                .frame(width: 34, height: 34)
+                .background(color.opacity(0.15))
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+
+                if let average {
+                    HStack(spacing: 6) {
+                        Text(average.formattedVariation)
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(color.opacity(0.14))
+                            .foregroundColor(color)
+                            .clipShape(Capsule())
+
+                        if average.sampleCount > 1 {
+                            Text("Rango \(average.formattedMinMaxRange)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                    }
+                } else {
+                    Text("Sin registros en este periodo")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            Text(average?.formattedAverageTime ?? "--:--")
+                .font(.headline)
+                .fontWeight(.heavy)
+                .monospacedDigit()
+                .foregroundColor(.primary)
+        }
+        .padding(12)
+        .background(Color(.tertiarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+// MARK: - Custom Cycle Range Picker Sheet
+
+private struct CustomCycleRangeSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var startDate: Date
+    @Binding var endDate: Date
+    let configuration: SleepScheduleConfiguration
+    let onApply: () -> Void
+
+    @State private var draftStart: Date = Date()
+    @State private var draftEnd: Date = Date()
+
+    private var maxSelectableDate: Date {
+        let startOfCurrentCycleDay = Calendar.current.startOfDay(for: configuration.cycleRange(offset: 0).start)
+        return Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: startOfCurrentCycleDay)
+            ?? configuration.cycleRange(offset: 0).start
+    }
+
+    private var previewCycles: [SleepCycleRange] {
+        SleepAnalyticsService.shared.resolveCycles(
+            preset: .custom,
+            customStartDate: draftStart,
+            customEndDate: draftEnd,
+            configuration: configuration
+        )
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    DatePicker(
+                        "Ciclo de inicio",
+                        selection: $draftStart,
+                        in: ...maxSelectableDate,
+                        displayedComponents: [.date]
+                    )
+
+                    DatePicker(
+                        "Ciclo de fin",
+                        selection: $draftEnd,
+                        in: draftStart...maxSelectableDate,
+                        displayedComponents: [.date]
+                    )
+                } header: {
+                    Text("Selecciona las fechas del rango")
+                } footer: {
+                    Text("Cada fecha representa un ciclo completo de 24 horas alineado con el horario configurado en Ajustes (\(configuration.nightStartTimeString) – \(configuration.dayStartTimeString)).")
+                        .font(.caption)
+                }
+
+                if let first = previewCycles.first, let last = previewCycles.last {
+                    Section("Resumen del rango") {
+                        HStack {
+                            Text("Inicio exacto")
+                            Spacer()
+                            Text(formattedDateTime(first.start))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+
+                        HStack {
+                            Text("Fin exacto")
+                            Spacer()
+                            Text(formattedDateTime(last.displayEnd))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+
+                        HStack {
+                            Text("Ciclos incluidos")
+                            Spacer()
+                            Text("\(previewCycles.count) \(previewCycles.count == 1 ? "ciclo" : "ciclos") (24h)")
+                                .fontWeight(.semibold)
+                                .foregroundColor(.indigo)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Rango personalizado")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancelar") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Aplicar") {
+                        startDate = min(draftStart, draftEnd)
+                        endDate = max(draftStart, draftEnd)
+                        onApply()
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+            .onAppear {
+                let clampedEnd = min(endDate, maxSelectableDate)
+                let clampedStart = min(startDate, clampedEnd)
+                draftStart = clampedStart
+                draftEnd = clampedEnd
+            }
+            .onChange(of: draftStart) { _, newValue in
+                if newValue > draftEnd {
+                    draftEnd = newValue
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func formattedDateTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "es_ES")
+        formatter.dateFormat = "d MMM yyyy, HH:mm"
+        return formatter.string(from: date)
+    }
+}
