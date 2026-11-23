@@ -31,9 +31,9 @@ public struct SleepTimelineProvider: TimelineProvider {
     }
 
     public func getTimeline(in context: Context, completion: @escaping (Timeline<SleepWidgetEntry>) -> Void) {
-        let entry = currentEntry()
-        let nextUpdate = entry.snapshot.nextRefreshDate()
-        let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
+        let (snapshots, nextUpdate) = MediumWidgetSnapshot.makeTimeline()
+        let entries = snapshots.map { SleepWidgetEntry(snapshot: $0) }
+        let timeline = Timeline(entries: entries, policy: .after(nextUpdate))
         completion(timeline)
     }
 
