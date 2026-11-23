@@ -571,6 +571,279 @@ final class SleepScheduleConfigurationTests: XCTestCase {
         XCTAssertEqual(lateMetrics.completedNapsCount, 2)
     }
 
+    // MARK: - Issue #36: Cycle Summary Longest Stretches, Night Wakings & Dynamic Recalculation
+
+    func testCycleSummaryLongestNightAndDaySleepAndAwakeStretches() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Bogota")!
+
+        // Standard schedule: Night 19:00 - 07:00, Day 07:00 - 19:00
+        let config = SleepScheduleConfiguration.standard
+        configManager.save(config)
+
+        // Cycle: [Nov 19 19:00, Nov 20 19:00)
+        // Night:
+        //   20:00 -> 01:00 (5h night sleep)
+        //   01:00 -> 01:25 (25m night awake)
+        //   01:25 -> 04:00 (2h 35m night sleep)
+        //   04:00 -> 04:50 (50m night awake)  <-- longest night awake (50m)
+        //   04:50 -> 07:10 (2h 20m night sleep; wake at 07:10 is morning wake!)
+        //   Longest night sleep = 5h, total night sleep = 9h 55m, night wakings = 2
+        // Day:
+        //   07:10 -> 09:40 (2h 30m daytime awake)
+        //   09:40 -> 10:30 (50m nap #1)
+        //   10:30 -> 13:45 (3h 15m daytime awake)
+        //   13:45 -> 15:30 (1h 45m nap #2)  <-- longest nap (1h 45m)
+        //   15:30 -> 19:30 (4h 00m daytime awake into next cycle's bedtime!) <-- longest daytime awake (4h)
+        //   Next cycle night sleep: 19:30 -> 06:30
+        let events: [(EventType, Int, Int, Int)] = [
+            (.sleep, 19, 20, 0),
+            (.wake, 20, 1, 0),
+            (.sleep, 20, 1, 25),
+            (.wake, 20, 4, 0),
+            (.sleep, 20, 4, 50),
+            (.wake, 20, 7, 10),
+            (.sleep, 20, 9, 40),
+            (.wake, 20, 10, 30),
+            (.sleep, 20, 13, 45),
+            (.wake, 20, 15, 30),
+            (.sleep, 20, 19, 30),
+            (.wake, 21, 6, 30)
+        ]
+
+        for (type, day, hour, minute) in events {
+            let ts = calendar.date(from: DateComponents(year: 2026, month: 11, day: day, hour: hour, minute: minute))!
+            try service.recordEvent(type: type, timestamp: ts, force: true)
+        }
+
+        let targetCycle = config.cycleRange(
+            containing: calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 12, minute: 0))!,
+            calendar: calendar
+        )
+        let metrics = try service.calculateCycleMetrics(for: targetCycle, calendar: calendar, configuration: config)
+
+        // Preserved indicators
+        XCTAssertEqual(metrics.nightSleepOnset, calendar.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 20, minute: 0))!)
+        XCTAssertEqual(metrics.morningWakeTime, calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 7, minute: 10))!)
+        let expectedNightSleep: TimeInterval = (9 * 3600) + (55 * 60)
+        let expectedDaytimeSleep: TimeInterval = (2 * 3600) + (35 * 60)
+        XCTAssertEqual(metrics.totalNightSleepDuration, expectedNightSleep, accuracy: 1.0)
+        XCTAssertEqual(metrics.totalDaytimeSleepDuration, expectedDaytimeSleep, accuracy: 1.0)
+        XCTAssertEqual(metrics.completedNapsCount, 2)
+
+        // New indicators
+        XCTAssertEqual(metrics.nightWakingsCount, 2)
+        XCTAssertEqual(metrics.longestNightSleepDuration ?? -1, 5 * 3600, accuracy: 1.0)
+        XCTAssertEqual(metrics.longestNightAwakeDuration ?? -1, 50 * 60, accuracy: 1.0)
+        XCTAssertEqual(metrics.longestDaytimeSleepDuration ?? -1, 105 * 60, accuracy: 1.0)
+        XCTAssertEqual(metrics.longestDaytimeAwakeDuration ?? -1, 4 * 3600, accuracy: 1.0)
+
+        // Next cycle (Nov 20 19:00 -> Nov 21 19:00) slept straight through 19:30 -> 06:30 with 0 night wakings!
+        // The previous cycle's 15:30 -> 19:30 wake window must NOT leak into next cycle's night wakings.
+        let nextCycle = config.cycleRange(offset: 1, from: targetCycle.start, calendar: calendar)
+        let nextMetrics = try service.calculateCycleMetrics(for: nextCycle, calendar: calendar, configuration: config)
+        XCTAssertEqual(nextMetrics.nightWakingsCount, 0)
+        XCTAssertEqual(nextMetrics.longestNightSleepDuration ?? -1, 11 * 3600, accuracy: 1.0)
+        XCTAssertNil(nextMetrics.longestNightAwakeDuration)
+        XCTAssertNil(nextMetrics.longestDaytimeSleepDuration)
+        XCTAssertNil(nextMetrics.longestDaytimeAwakeDuration)
+        XCTAssertEqual(DayMetrics.formatOptionalDuration(nextMetrics.longestNightAwakeDuration), "—")
+    }
+
+    func testCycleSummaryLongestStretchesRecalculateDynamicallyOnScheduleChange() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Bogota")!
+
+        // Initial schedule: Night 19:00 - 07:00, Day 07:00 - 19:00
+        let initialConfig = SleepScheduleConfiguration(nightStartHour: 19, nightStartMinute: 0, dayStartHour: 7, dayStartMinute: 0)
+        configManager.save(initialConfig)
+
+        // Historical cycle events (Nov 15-16):
+        //   20:00 -> 05:30 (9h 30m sleep)
+        //   05:30 -> 06:15 (45m awake)
+        //   06:15 -> 08:00 (1h 45m sleep)
+        //   08:00 -> 11:00 (3h 00m awake)
+        //   11:00 -> 12:15 (1h 15m sleep)
+        //   12:15 -> 16:00 (3h 45m awake)
+        //   16:00 -> 17:00 (1h 00m sleep)
+        let events: [(EventType, Int, Int, Int)] = [
+            (.sleep, 15, 20, 0),
+            (.wake, 16, 5, 30),
+            (.sleep, 16, 6, 15),
+            (.wake, 16, 8, 0),
+            (.sleep, 16, 11, 0),
+            (.wake, 16, 12, 15),
+            (.sleep, 16, 16, 0),
+            (.wake, 16, 17, 0)
+        ]
+
+        for (type, day, hour, minute) in events {
+            let ts = calendar.date(from: DateComponents(year: 2026, month: 11, day: day, hour: hour, minute: minute))!
+            try service.recordEvent(type: type, timestamp: ts, force: true)
+        }
+
+        let referenceNoon = calendar.date(from: DateComponents(year: 2026, month: 11, day: 16, hour: 12, minute: 0))!
+
+        // 1) Under 19:00 - 07:00:
+        //    - 05:30 -> 06:15 is a 45m night waking (1 waking)
+        //    - 06:15 -> 08:00 is classified as night sleep
+        //    - Longest night sleep = 9h 30m, Longest night awake = 45m
+        //    - Naps: 1h 15m, 1h 00m -> 2 naps, Longest nap = 1h 15m
+        //    - Daytime wake windows: 3h 00m, 3h 45m -> Longest daytime awake = 3h 45m
+        let beforeMetrics = try service.calculateDayMetrics(for: referenceNoon, calendar: calendar)
+        XCTAssertEqual(beforeMetrics.nightWakingsCount, 1)
+        XCTAssertEqual(beforeMetrics.longestNightSleepDuration ?? -1, 9.5 * 3600, accuracy: 1.0)
+        XCTAssertEqual(beforeMetrics.longestNightAwakeDuration ?? -1, 45 * 60, accuracy: 1.0)
+        XCTAssertEqual(beforeMetrics.completedNapsCount, 2)
+        XCTAssertEqual(beforeMetrics.longestDaytimeSleepDuration ?? -1, 75 * 60, accuracy: 1.0)
+        XCTAssertEqual(beforeMetrics.longestDaytimeAwakeDuration ?? -1, 225 * 60, accuracy: 1.0)
+
+        // 2) User edits Settings to Night 19:00 - 06:00, Day 06:00 - 19:00:
+        //    - 06:15 -> 08:00 (1h 45m) is reclassified as a Nap -> now 3 naps and longest nap = 1h 45m!
+        //    - 05:30 -> 06:15 ends in Day -> NO longer a night waking! nightWakingsCount = 0, longestNightAwakeDuration = nil!
+        //    - Night sleep has only 20:00 -> 05:30 (9h 30m)
+        let updatedConfig = SleepScheduleConfiguration(nightStartHour: 19, nightStartMinute: 0, dayStartHour: 6, dayStartMinute: 0)
+        try service.applyScheduleConfiguration(updatedConfig, calendar: calendar)
+
+        let afterMetrics = try service.calculateDayMetrics(for: referenceNoon, calendar: calendar)
+        XCTAssertEqual(afterMetrics.nightWakingsCount, 0)
+        XCTAssertEqual(afterMetrics.longestNightSleepDuration ?? -1, 9.5 * 3600, accuracy: 1.0)
+        XCTAssertNil(afterMetrics.longestNightAwakeDuration)
+        XCTAssertEqual(afterMetrics.completedNapsCount, 3)
+        XCTAssertEqual(afterMetrics.longestDaytimeSleepDuration ?? -1, 105 * 60, accuracy: 1.0)
+        XCTAssertEqual(afterMetrics.longestDaytimeAwakeDuration ?? -1, 225 * 60, accuracy: 1.0)
+    }
+
+    func testCycleSummaryIgnoresIncompleteAndOrphanedEventsForAllStretches() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Bogota")!
+        let config = SleepScheduleConfiguration.standard // 19:00 - 07:00
+        configManager.save(config)
+
+        // Sequence with orphans and ongoing events in [Nov 19 19:00, Nov 20 19:00):
+        // - Late nap from prev cycle ending at 19:15 (18:30 -> 19:15) -> 19:15 -> 20:00 is before bedtime, NOT a night waking
+        // - Orphan duplicate sleep at 19:40 (no wake before 20:00) -> ignored!
+        // - Valid night sleep: 20:00 -> 02:00 (6h)
+        // - Orphan duplicate wake at 02:20 -> ignored!
+        // - Valid night sleep #2: 02:40 -> 07:00 (4h 20m) => valid night awake is 02:00 -> 02:40 (40m)
+        // - Valid nap #1: 10:00 -> 11:00 (1h) => daytime awake 07:00 -> 10:00 (3h)
+        // - Ongoing sleep at 15:00 (no wake yet):
+        //     * 11:00 -> 15:00 (4h) IS a complete [wake -> sleep] daytime awake stretch!
+        //     * 15:00 -> now is NOT a complete sleep block -> must NOT count as a nap or longest nap!
+        let timeline: [(EventType, Int, Int, Int)] = [
+            (.sleep, 19, 18, 30),
+            (.wake, 19, 19, 15),
+            (.sleep, 19, 19, 40), // orphan duplicate sleep
+            (.sleep, 19, 20, 0),
+            (.wake, 20, 2, 0),
+            (.wake, 20, 2, 20),   // orphan duplicate wake
+            (.sleep, 20, 2, 40),
+            (.wake, 20, 7, 0),
+            (.sleep, 20, 10, 0),
+            (.wake, 20, 11, 0),
+            (.sleep, 20, 15, 0)   // ongoing sleep (no wake yet)
+        ]
+
+        for (type, day, hour, minute) in timeline {
+            let ts = calendar.date(from: DateComponents(year: 2026, month: 11, day: day, hour: hour, minute: minute))!
+            try service.recordEvent(type: type, timestamp: ts, force: true)
+        }
+
+        let cycle = config.cycleRange(
+            containing: calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 12, minute: 0))!,
+            calendar: calendar
+        )
+        let metrics = try service.calculateCycleMetrics(for: cycle, calendar: calendar, configuration: config)
+
+        // Orphan sleep at 19:40 ignored -> nightSleepOnset is 20:00
+        XCTAssertEqual(metrics.nightSleepOnset, calendar.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 20, minute: 0))!)
+        XCTAssertEqual(metrics.morningWakeTime, calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 7, minute: 0))!)
+
+        // Night: 6h and 4h 20m -> longest 6h; only 1 real night waking (02:00 -> 02:40 = 40m; 19:15->20:00 excluded)
+        XCTAssertEqual(metrics.nightWakingsCount, 1)
+        XCTAssertEqual(metrics.longestNightSleepDuration ?? -1, 6 * 3600, accuracy: 1.0)
+        XCTAssertEqual(metrics.longestNightAwakeDuration ?? -1, 40 * 60, accuracy: 1.0)
+
+        // Day: only 10:00 -> 11:00 (1h) is a completed nap (18:30->19:15 clipped 15m in this cycle also counts as nap)
+        XCTAssertEqual(metrics.longestDaytimeSleepDuration ?? -1, 3600, accuracy: 1.0)
+        // Daytime wake windows: 07:00->10:00 (3h) and 11:00->15:00 (4h) -> longest = 4h
+        XCTAssertEqual(metrics.longestDaytimeAwakeDuration ?? -1, 4 * 3600, accuracy: 1.0)
+
+        // Empty cycle returns nil for all optional stretches and 0 for counts
+        let emptyCycle = config.cycleRange(offset: -5, from: cycle.start, calendar: calendar)
+        let emptyMetrics = try service.calculateCycleMetrics(for: emptyCycle, calendar: calendar, configuration: config)
+        XCTAssertEqual(emptyMetrics.nightWakingsCount, 0)
+        XCTAssertEqual(emptyMetrics.completedNapsCount, 0)
+        XCTAssertNil(emptyMetrics.longestNightSleepDuration)
+        XCTAssertNil(emptyMetrics.longestNightAwakeDuration)
+        XCTAssertNil(emptyMetrics.longestDaytimeSleepDuration)
+        XCTAssertNil(emptyMetrics.longestDaytimeAwakeDuration)
+        XCTAssertNil(emptyMetrics.nightSleepOnset)
+        XCTAssertNil(emptyMetrics.morningWakeTime)
+    }
+
+    func testCycleSummaryEffectiveTotalsIncludeOngoingNightAndDaytimeSleep() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Bogota")!
+        let config = SleepScheduleConfiguration.standard // Night 19:00 - 07:00, Day 07:00 - 19:00
+        configManager.save(config)
+
+        // Scenario 1: First night sleep ongoing for 12 minutes (20:00 -> now 20:12)
+        let firstNightStart = calendar.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 20, minute: 0))!
+        let now12Min = calendar.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 20, minute: 12))!
+        try service.recordEvent(type: .sleep, timestamp: firstNightStart, force: true)
+
+        let cycle = config.cycleRange(containing: now12Min, calendar: calendar)
+        var metrics = try service.calculateCycleMetrics(for: cycle, calendar: calendar, configuration: config, now: now12Min)
+        var ongoing = try service.activeSleepInterval(in: cycle, configuration: config, now: now12Min, calendar: calendar)
+
+        XCTAssertEqual(metrics.effectiveTotalNightSleepDuration(including: ongoing, at: now12Min), 12 * 60, accuracy: 1.0)
+        XCTAssertEqual(metrics.effectiveTotalDaytimeSleepDuration(including: ongoing, at: now12Min), 0, accuracy: 1.0)
+        // Completed-only longest stretch stays nil until sleep completes
+        XCTAssertNil(metrics.longestNightSleepDuration)
+
+        // Scenario 2: Baby slept 2h (20:00 -> 22:00), woke up, went back to sleep at 22:30, now 22:35 (5m ongoing) => 2h 5m total night sleep
+        let wake2200 = calendar.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 22, minute: 0))!
+        let sleep2230 = calendar.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 22, minute: 30))!
+        let now2235 = calendar.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 22, minute: 35))!
+        try service.recordEvent(type: .wake, timestamp: wake2200, force: true)
+        try service.recordEvent(type: .sleep, timestamp: sleep2230, force: true)
+
+        metrics = try service.calculateCycleMetrics(for: cycle, calendar: calendar, configuration: config, now: now2235)
+        ongoing = try service.activeSleepInterval(in: cycle, configuration: config, now: now2235, calendar: calendar)
+
+        let expectedTwoHoursFiveMin: TimeInterval = (2 * 3600) + (5 * 60)
+        XCTAssertEqual(metrics.effectiveTotalNightSleepDuration(including: ongoing, at: now2235), expectedTwoHoursFiveMin, accuracy: 1.0)
+        XCTAssertEqual(metrics.effectiveTotalDaytimeSleepDuration(including: ongoing, at: now2235), 0, accuracy: 1.0)
+
+        // Scenario 3: Daytime — baby completed 1h nap (10:00 -> 11:00) and is now 15m into second nap (14:00 -> now 14:15) => 1h 15m daytime total
+        let wake0700 = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 7, minute: 0))!
+        let nap1Start = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 10, minute: 0))!
+        let nap1End = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 11, minute: 0))!
+        let nap2Start = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 14, minute: 0))!
+        let now1415 = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 14, minute: 15))!
+
+        try service.recordEvent(type: .wake, timestamp: wake0700, force: true)
+        try service.recordEvent(type: .sleep, timestamp: nap1Start, force: true)
+        try service.recordEvent(type: .wake, timestamp: nap1End, force: true)
+        try service.recordEvent(type: .sleep, timestamp: nap2Start, force: true)
+
+        metrics = try service.calculateCycleMetrics(for: cycle, calendar: calendar, configuration: config, now: now1415)
+        ongoing = try service.activeSleepInterval(in: cycle, configuration: config, now: now1415, calendar: calendar)
+
+        let expectedDaytime: TimeInterval = 3600 + (15 * 60)
+        let expectedNightCompleted: TimeInterval = (2 * 3600) + (8 * 3600 + 30 * 60) // 20:00-22:00 (2h) + 22:30-07:00 (8h 30m)
+        XCTAssertEqual(metrics.effectiveTotalDaytimeSleepDuration(including: ongoing, at: now1415), expectedDaytime, accuracy: 1.0)
+        XCTAssertEqual(metrics.effectiveTotalNightSleepDuration(including: ongoing, at: now1415), expectedNightCompleted, accuracy: 1.0)
+
+        // When nap 2 completes at 14:15, activeOngoingInterval becomes nil and total stays 1h 15m (no double counting)
+        try service.recordEvent(type: .wake, timestamp: now1415, force: true)
+        metrics = try service.calculateCycleMetrics(for: cycle, calendar: calendar, configuration: config, now: now1415)
+        ongoing = try service.activeSleepInterval(in: cycle, configuration: config, now: now1415, calendar: calendar)
+        XCTAssertNil(ongoing)
+        XCTAssertEqual(metrics.effectiveTotalDaytimeSleepDuration(including: ongoing, at: now1415), expectedDaytime, accuracy: 1.0)
+    }
+
     // MARK: - Helpers
 
     private func makeDate(hour: Int, minute: Int) -> Date {
