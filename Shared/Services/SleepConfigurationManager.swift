@@ -32,10 +32,6 @@ public final class SleepConfigurationManager: @unchecked Sendable {
             lock.lock()
             defer { lock.unlock() }
 
-            if let cached = cachedConfiguration {
-                return cached
-            }
-
             if let data = userDefaults.data(forKey: configKey),
                let decoded = try? JSONDecoder().decode(SleepScheduleConfiguration.self, from: data) {
                 cachedConfiguration = decoded

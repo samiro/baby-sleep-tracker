@@ -4,20 +4,11 @@ import AppIntents
 
 public struct SleepWidgetEntry: TimelineEntry {
     public let date: Date
-    public let state: CurrentSleepState
-    public let mostRecentInterval: SleepInterval?
-    public let statusMessage: String?
+    public let snapshot: MediumWidgetSnapshot
 
-    public init(
-        date: Date = Date(),
-        state: CurrentSleepState = .awake(since: Date().addingTimeInterval(-3600), event: nil),
-        mostRecentInterval: SleepInterval? = nil,
-        statusMessage: String? = nil
-    ) {
-        self.date = date
-        self.state = state
-        self.mostRecentInterval = mostRecentInterval
-        self.statusMessage = statusMessage
+    public init(snapshot: MediumWidgetSnapshot) {
+        self.date = snapshot.date
+        self.snapshot = snapshot
     }
 }
 
@@ -27,38 +18,28 @@ public struct SleepTimelineProvider: TimelineProvider {
     public init() {}
 
     public func placeholder(in context: Context) -> SleepWidgetEntry {
-        SleepWidgetEntry(
-            date: Date(),
-            state: .sleeping(since: Date().addingTimeInterval(-1800), event: SleepEvent(type: .sleep, timestamp: Date().addingTimeInterval(-1800))),
-            mostRecentInterval: nil,
-            statusMessage: nil
-        )
+        SleepWidgetEntry(snapshot: MediumWidgetSnapshot.placeholder())
     }
 
     public func getSnapshot(in context: Context, completion: @escaping (SleepWidgetEntry) -> Void) {
+        if context.isPreview {
+            completion(SleepWidgetEntry(snapshot: MediumWidgetSnapshot.placeholder()))
+            return
+        }
         let entry = currentEntry()
         completion(entry)
     }
 
     public func getTimeline(in context: Context, completion: @escaping (Timeline<SleepWidgetEntry>) -> Void) {
         let entry = currentEntry()
-        // Refresh every 15 minutes or when App Intent triggers reloadAllTimelines
-        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date().addingTimeInterval(900)
+        let nextUpdate = entry.snapshot.nextRefreshDate()
         let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
         completion(timeline)
     }
 
     private func currentEntry() -> SleepWidgetEntry {
-        let service = SleepTrackingService.shared
-        let state = (try? service.getCurrentState()) ?? .unknown
-        let recent = try? service.getMostRecentSleepInterval()
-
-        return SleepWidgetEntry(
-            date: Date(),
-            state: state,
-            mostRecentInterval: recent,
-            statusMessage: nil
-        )
+        let snapshot = MediumWidgetSnapshot.make()
+        return SleepWidgetEntry(snapshot: snapshot)
     }
 }
 
@@ -82,8 +63,8 @@ public struct BabySleepTrackerWidget: Widget {
             EmanuelSleepWidgetMediumView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
         }
-        .configurationDisplayName("Baby Sleep Tracker · Sueño")
-        .description("Registra el sueño y vigilia del bebé en un toque.")
+        .configurationDisplayName(BabyProfileManager.defaultAppName)
+        .description("Consulta el estado actual, el resumen del ciclo 24h y registra el sueño en un toque.")
         .supportedFamilies([.systemMedium])
     }
 }
