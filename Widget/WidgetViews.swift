@@ -4,139 +4,186 @@ import AppIntents
 
 public struct EmanuelSleepWidgetMediumView: View {
     let entry: SleepWidgetEntry
-    @Environment(\.colorScheme) var colorScheme
 
     public init(entry: SleepWidgetEntry) {
         self.entry = entry
     }
 
-    private var isSleeping: Bool {
-        entry.state.isSleeping
+    private var snapshot: MediumWidgetSnapshot {
+        entry.snapshot
     }
 
     private var stateColor: Color {
-        isSleeping ? Color.indigo : Color.orange
-    }
-
-    private var stateTitle: String {
-        switch entry.state {
+        switch snapshot.state {
         case .sleeping:
-            return "Durmiendo"
+            return .indigo
         case .awake:
-            return "Despierto"
+            return .orange
         case .unknown:
-            return "Sin registro"
+            return .secondary
         }
-    }
-
-    private var stateIcon: String {
-        isSleeping ? "moon.stars.fill" : "sun.max.fill"
     }
 
     public var body: some View {
         HStack(spacing: 12) {
-            // MARK: - Left Column: State & Elapsed Live Timer
-            VStack(alignment: .leading, spacing: 4) {
-                // Header
-                HStack(spacing: 4) {
-                    Text("\(BabyProfileManager.shared.displayName) · Sueño")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
+            // MARK: - Block 1: Current State & Single Dynamic Action
+            VStack(alignment: .leading, spacing: 6) {
+                // Dynamic baby / app identity
+                Text(snapshot.displayName)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
 
-                // Current State Badge
+                // Current state pill
                 HStack(spacing: 5) {
-                    Image(systemName: stateIcon)
+                    Image(systemName: snapshot.stateIconName)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(stateColor)
+                    Text(snapshot.stateTitle)
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(stateColor)
-                    Text(stateTitle)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(stateColor)
+                        .foregroundStyle(stateColor)
+                        .lineLimit(1)
                 }
-                .padding(.vertical, 2)
-                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .padding(.horizontal, 8)
                 .background(stateColor.opacity(0.15))
                 .clipShape(Capsule())
 
-                // Elapsed Live Timer
-                if let since = entry.state.sinceDate {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(since, style: .timer)
-                            .font(.system(size: 24, weight: .heavy, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundColor(.primary)
-                            .minimumScaleFactor(0.8)
-                            .lineLimit(1)
-                        Text(isSleeping ? "de sueño" : "despierto")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.top, 1)
+                // Elapsed live timer (no redundant state subtitle)
+                if let since = snapshot.state.sinceDate {
+                    Text(since, style: .timer)
+                        .font(.system(size: 24, weight: .heavy, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(.primary)
+                        .minimumScaleFactor(0.75)
+                        .lineLimit(1)
                 } else {
                     Text("--:--")
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
-                        .foregroundColor(.secondary)
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 2)
+
+                // Single dynamic primary action button
+                primaryActionButton
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+
+            Divider()
+                .padding(.vertical, 2)
+
+            // MARK: - Block 2: Current 24-Hour Cycle Summary
+            VStack(alignment: .leading, spacing: 10) {
+                // Active 24h cycle window label
+                Text(snapshot.formattedCycleWindow())
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+
+                // Last recorded event (exact time + event type)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Último evento")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+
+                    if let timeText = snapshot.formattedLastEventTime(),
+                       let eventLabel = snapshot.lastEventLabel {
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            Text(timeText)
+                                .font(.system(size: 16, weight: .bold, design: .rounded))
+                                .monospacedDigit()
+                                .foregroundStyle(.primary)
+                            Text("· \(eventLabel)")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                    } else {
+                        Text("Sin registros")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
 
                 Spacer(minLength: 0)
 
-                // Most Recent Sleep Interval
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Último intervalo")
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundColor(.secondary)
-                    if let recent = entry.mostRecentInterval {
-                        Text(recent.summaryText)
-                            .font(.system(size: 11, weight: .semibold))
+                // Total accumulated sleep in current 24h cycle
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Sueño del ciclo")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+
+                    HStack(spacing: 5) {
+                        Image(systemName: "moon.zzz.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.indigo)
+                        Text(snapshot.formattedCycleTotalSleep)
+                            .font(.system(size: 18, weight: .heavy, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(.primary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.85)
-                    } else {
-                        Text("Ninguno registrado hoy")
-                            .font(.system(size: 10))
-                            .foregroundColor(.secondary)
                     }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Divider()
-                .padding(.vertical, 4)
-
-            // MARK: - Right Column: Large Action Buttons
-            VStack(spacing: 6) {
-                // Button 1: "Se durmió"
-                Button(intent: RecordSleepIntent()) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "moon.fill")
-                            .font(.system(size: 13, weight: .bold))
-                        Text("Se durmió")
-                            .font(.system(size: 13, weight: .bold))
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .foregroundColor(isSleeping ? Color.secondary : Color.white)
-                    .background(isSleeping ? Color.gray.opacity(0.2) : Color.indigo)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                }
-                .buttonStyle(.plain)
-
-                // Button 2: "Despertó"
-                Button(intent: RecordWakeIntent()) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "sun.max.fill")
-                            .font(.system(size: 13, weight: .bold))
-                        Text("Despertó")
-                            .font(.system(size: 13, weight: .bold))
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .foregroundColor(!isSleeping ? Color.secondary : Color.black)
-                    .background(!isSleeping ? Color.gray.opacity(0.2) : Color.orange)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                }
-                .buttonStyle(.plain)
-            }
-            .frame(width: 140)
+            .frame(width: 136, alignment: .leading)
+            .frame(maxHeight: .infinity, alignment: .topLeading)
         }
-        .padding(.all, 8)
-        .widgetURL(URL(string: "babysleeptracker://history"))
+        .padding(.vertical, 2)
+        .widgetURL(MediumWidgetSnapshot.widgetURL)
+    }
+
+    @ViewBuilder
+    private var primaryActionButton: some View {
+        switch snapshot.primaryAction {
+        case .recordWake:
+            Button(intent: RecordWakeIntent()) {
+                actionButtonLabel(
+                    title: MediumWidgetAction.recordWake.title,
+                    icon: MediumWidgetAction.recordWake.iconName,
+                    foreground: .black,
+                    background: .orange
+                )
+            }
+            .buttonStyle(.plain)
+
+        case .recordSleep:
+            Button(intent: RecordSleepIntent()) {
+                actionButtonLabel(
+                    title: MediumWidgetAction.recordSleep.title,
+                    icon: MediumWidgetAction.recordSleep.iconName,
+                    foreground: .white,
+                    background: .indigo
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func actionButtonLabel(
+        title: String,
+        icon: String,
+        foreground: Color,
+        background: Color
+    ) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .bold))
+            Text(title)
+                .font(.system(size: 13, weight: .bold))
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 36)
+        .foregroundStyle(foreground)
+        .background(background)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }

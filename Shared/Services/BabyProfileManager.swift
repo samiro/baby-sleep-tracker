@@ -1,5 +1,8 @@
 import Foundation
 import Combine
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
 
 public final class BabyProfileManager: ObservableObject {
     public static let shared = BabyProfileManager()
@@ -7,18 +10,21 @@ public final class BabyProfileManager: ObservableObject {
     public static let defaultAppName = "Baby Sleep Tracker"
     public static let babyNameKey = "com.samiro.babysleeptracker.babyName"
     public static let hasPromptedBabyNameKey = "com.samiro.babysleeptracker.hasPromptedBabyName"
+    private static let babyNameSyncedToGroupKey = "com.samiro.babysleeptracker.babyNameSyncedToGroup"
 
     private let primaryDefaults: UserDefaults
     private let groupDefaults: UserDefaults?
+    private let usesSharedStorage: Bool
 
     @Published public private(set) var babyName: String?
     @Published public private(set) var displayName: String
     @Published public private(set) var hasPromptedBabyName: Bool
 
-    public init(defaults: UserDefaults? = nil) {
+    public init(defaults: UserDefaults? = nil, groupDefaults: UserDefaults? = nil) {
         if let defaults = defaults {
             self.primaryDefaults = defaults
-            self.groupDefaults = nil
+            self.groupDefaults = groupDefaults
+            self.usesSharedStorage = false
         } else {
             self.primaryDefaults = .standard
             // Only attach group suite if the container is genuinely accessible to avoid silent sandbox rejects
@@ -27,6 +33,7 @@ public final class BabyProfileManager: ObservableObject {
             } else {
                 self.groupDefaults = nil
             }
+            self.usesSharedStorage = true
         }
 
         let loadedName = Self.readBabyName(primary: self.primaryDefaults, group: self.groupDefaults)
@@ -35,13 +42,22 @@ public final class BabyProfileManager: ObservableObject {
         self.hasPromptedBabyName = Self.readHasPrompted(primary: self.primaryDefaults, group: self.groupDefaults)
     }
 
+    /// Reads the latest display name directly from shared storage without requiring main-thread publishing.
+    /// Safe to call from WidgetKit timelines and AppIntents running in extension processes.
+    public func currentDisplayName() -> String {
+        Self.readBabyName(primary: primaryDefaults, group: groupDefaults) ?? Self.defaultAppName
+    }
+
     private static func readBabyName(primary: UserDefaults, group: UserDefaults?) -> String? {
-        if let name = primary.string(forKey: babyNameKey)?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
-            return name
+        if let group = group {
+            if let name = group.string(forKey: babyNameKey)?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+                return name
+            }
+            if group.bool(forKey: babyNameSyncedToGroupKey) {
+                return nil
+            }
         }
-        if let group = group, let name = group.string(forKey: babyNameKey)?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
-            primary.set(name, forKey: babyNameKey)
-            primary.synchronize()
+        if let name = primary.string(forKey: babyNameKey)?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
             return name
         }
         return nil
@@ -93,8 +109,15 @@ public final class BabyProfileManager: ObservableObject {
             primaryDefaults.removeObject(forKey: Self.babyNameKey)
             groupDefaults?.removeObject(forKey: Self.babyNameKey)
         }
+        groupDefaults?.set(true, forKey: Self.babyNameSyncedToGroupKey)
         primaryDefaults.synchronize()
         groupDefaults?.synchronize()
+
+        if usesSharedStorage {
+            #if canImport(WidgetKit)
+            WidgetCenter.shared.reloadAllTimelines()
+            #endif
+        }
 
         let updateBlock = {
             self.babyName = finalName

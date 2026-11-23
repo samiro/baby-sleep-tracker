@@ -28,6 +28,7 @@
 		2DD31668B0E50A43917AFE3B /* SleepActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8D8563B8BE0970EE2B1AAC0 /* SleepActivityAttributes.swift */; };
 		2E3CE58A15AE763F87DB79B2 /* BabyProfileManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FE7A68D0CE5FC506B1FDF93 /* BabyProfileManagerTests.swift */; };
 		2FD38E2FF0234CF97DEB4E70 /* ExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 370806AE8A51272386D7BE58 /* ExportService.swift */; };
+		324CD7DA06ACFF8104373496 /* MediumWidgetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518CA3AA05F5CE27AD1F70F7 /* MediumWidgetTests.swift */; };
 		369D7FC55721DC65DD0EA933 /* BabyProfileManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E498FB6A2F3383D0BE8FADD /* BabyProfileManager.swift */; };
 		37B906729033BF91E0D8A17F /* SleepActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8D8563B8BE0970EE2B1AAC0 /* SleepActivityAttributes.swift */; };
 		396528C8AC542DCD11F8273A /* BabySleepTrackerWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95B8451B5860BB634F3EA029 /* BabySleepTrackerWidget.swift */; };
@@ -44,6 +45,7 @@
 		68CD3B81C173F632E2D4D2F8 /* SleepAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EEB4F12B1F231392974CC9D /* SleepAppIntents.swift */; };
 		6C4B25C38409A290F3D25DD0 /* EventType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 031A51BA646977A5DF9D4F1F /* EventType.swift */; };
 		6C92F4E64F5F7F7F4D323352 /* SleepConfigurationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C82D7228747F41E731447D86 /* SleepConfigurationManager.swift */; };
+		729656E6C2982CC4507B9903 /* MediumWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D01F79D7EE660A1054D29EE /* MediumWidgetSnapshot.swift */; };
 		736A01479A63D8D24E9F23FB /* DayMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EA64BD2B9329998ECA76500 /* DayMetrics.swift */; };
 		764EF44F3B4F21AFC79E035F /* SleepEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09EAC2966E8362D7405B1EAC /* SleepEvent.swift */; };
 		7A5A81ACF1AA978940B489C5 /* EventType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 031A51BA646977A5DF9D4F1F /* EventType.swift */; };
@@ -59,6 +61,7 @@
 		AA1328ADB5523A21B83B62CC /* SleepClassification.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D593A441E4432758CBAC3C4 /* SleepClassification.swift */; };
 		B43A966ADC58F31D60727D5C /* AppGroupCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62E9AD32FA3F5BA5B8A4FEA1 /* AppGroupCoordinator.swift */; };
 		B58D1339DE554087D75E7978 /* SQLiteDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F4B9844DF79DB42CE36DED2 /* SQLiteDatabase.swift */; };
+		BB4388327517C078DB6A2AAE /* MediumWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D01F79D7EE660A1054D29EE /* MediumWidgetSnapshot.swift */; };
 		BE9F24A9D8C4807216DCF976 /* MainDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0B88F2822C8D3459E0FA29 /* MainDashboardView.swift */; };
 		C3CE71EFDC6EE0E65689FC7C /* BabyProfileManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E498FB6A2F3383D0BE8FADD /* BabyProfileManager.swift */; };
 		C5F964CA1F2C25B366843D2A /* DayMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EA64BD2B9329998ECA76500 /* DayMetrics.swift */; };
@@ -74,6 +77,7 @@
 		EA56AC9E137E8349E4D3B4BC /* SleepTrackingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DCC1449EEBF2F1C09CA5DFD /* SleepTrackingService.swift */; };
 		F109CBA962279171B9032301 /* ConcurrencyAndPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 929E3515DCC1019CE0FEB014 /* ConcurrencyAndPersistenceTests.swift */; };
 		F33B1613949C2FC3FEDEA798 /* SleepInterval.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3150F095ECB913AB32762D93 /* SleepInterval.swift */; };
+		F53DBCC0B113F16B9A2CB222 /* MediumWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D01F79D7EE660A1054D29EE /* MediumWidgetSnapshot.swift */; };
 		FB6BD9E9F7016D4C6A100243 /* AppGroupCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62E9AD32FA3F5BA5B8A4FEA1 /* AppGroupCoordinator.swift */; };
 		FE2831ACCC8E5277DEE69888 /* OvernightBoundaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 902707140BD9A18D0EB30A36 /* OvernightBoundaryTests.swift */; };
 /* End PBXBuildFile section */
@@ -115,6 +119,7 @@
 		48E3EFCB5C63C4A9113C49EF /* DatabaseError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseError.swift; sourceTree = "<group>"; };
 		4A613935590B91437673A88D /* WidgetViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetViews.swift; sourceTree = "<group>"; };
 		4E54C885BB15BAF4FD13DB34 /* LiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityManager.swift; sourceTree = "<group>"; };
+		518CA3AA05F5CE27AD1F70F7 /* MediumWidgetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediumWidgetTests.swift; sourceTree = "<group>"; };
 		6050526827B09BC53973128E /* BabySleepTrackerLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BabySleepTrackerLiveActivityWidget.swift; sourceTree = "<group>"; };
 		62E9AD32FA3F5BA5B8A4FEA1 /* AppGroupCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppGroupCoordinator.swift; sourceTree = "<group>"; };
 		69DCF1F69DB6A8D269354A2C /* ExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportTests.swift; sourceTree = "<group>"; };
@@ -131,6 +136,7 @@
 		929E3515DCC1019CE0FEB014 /* ConcurrencyAndPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConcurrencyAndPersistenceTests.swift; sourceTree = "<group>"; };
 		92FB5CDFE154B436705FC3BD /* BabySleepTracker.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BabySleepTracker.entitlements; sourceTree = "<group>"; };
 		95B8451B5860BB634F3EA029 /* BabySleepTrackerWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BabySleepTrackerWidget.swift; sourceTree = "<group>"; };
+		9D01F79D7EE660A1054D29EE /* MediumWidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediumWidgetSnapshot.swift; sourceTree = "<group>"; };
 		9EEB4F12B1F231392974CC9D /* SleepAppIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepAppIntents.swift; sourceTree = "<group>"; };
 		A28E4028D8F2A675F454F535 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A8D8563B8BE0970EE2B1AAC0 /* SleepActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepActivityAttributes.swift; sourceTree = "<group>"; };
@@ -200,6 +206,7 @@
 				B9935520227E419FAB66C6BC /* EventEditingAndDeletionTests.swift */,
 				69DCF1F69DB6A8D269354A2C /* ExportTests.swift */,
 				276259D29817BF8DA7BC9735 /* LiveActivityTests.swift */,
+				518CA3AA05F5CE27AD1F70F7 /* MediumWidgetTests.swift */,
 				902707140BD9A18D0EB30A36 /* OvernightBoundaryTests.swift */,
 				C00A82E5DEF25F412A3CCD79 /* SleepIntervalTests.swift */,
 				BFA5A5FEDC05881E1123BE9E /* SleepScheduleConfigurationTests.swift */,
@@ -245,6 +252,7 @@
 			children = (
 				1EA64BD2B9329998ECA76500 /* DayMetrics.swift */,
 				031A51BA646977A5DF9D4F1F /* EventType.swift */,
+				9D01F79D7EE660A1054D29EE /* MediumWidgetSnapshot.swift */,
 				A8D8563B8BE0970EE2B1AAC0 /* SleepActivityAttributes.swift */,
 				6D593A441E4432758CBAC3C4 /* SleepClassification.swift */,
 				09EAC2966E8362D7405B1EAC /* SleepEvent.swift */,
@@ -392,6 +400,8 @@
 				1DAEA2BF4DF599DAF5BCA052 /* ExportTests.swift in Sources */,
 				2C9C5ADC30F166CD3B2D31FB /* LiveActivityManager.swift in Sources */,
 				A5B681BC7474177E1524DC45 /* LiveActivityTests.swift in Sources */,
+				BB4388327517C078DB6A2AAE /* MediumWidgetSnapshot.swift in Sources */,
+				324CD7DA06ACFF8104373496 /* MediumWidgetTests.swift in Sources */,
 				FE2831ACCC8E5277DEE69888 /* OvernightBoundaryTests.swift in Sources */,
 				145B0857763E79F18233C5DB /* SQLiteDatabase.swift in Sources */,
 				E327A1B456A02583F8107557 /* SleepActivityAttributes.swift in Sources */,
@@ -421,6 +431,7 @@
 				7A5A81ACF1AA978940B489C5 /* EventType.swift in Sources */,
 				4B4E9B9D7E201840E3EE3A84 /* ExportService.swift in Sources */,
 				E2E3D40E9294B45A1691236F /* LiveActivityManager.swift in Sources */,
+				729656E6C2982CC4507B9903 /* MediumWidgetSnapshot.swift in Sources */,
 				B58D1339DE554087D75E7978 /* SQLiteDatabase.swift in Sources */,
 				2DD31668B0E50A43917AFE3B /* SleepActivityAttributes.swift in Sources */,
 				68CD3B81C173F632E2D4D2F8 /* SleepAppIntents.swift in Sources */,
@@ -450,6 +461,7 @@
 				271E6382F994311945FE1682 /* ExportService.swift in Sources */,
 				A7828872CC512CB04C92F5B0 /* LiveActivityManager.swift in Sources */,
 				BE9F24A9D8C4807216DCF976 /* MainDashboardView.swift in Sources */,
+				F53DBCC0B113F16B9A2CB222 /* MediumWidgetSnapshot.swift in Sources */,
 				50ADD28FB1756869083E2D2A /* SQLiteDatabase.swift in Sources */,
 				1F383A13360348B46CAE9D49 /* SettingsView.swift in Sources */,
 				37B906729033BF91E0D8A17F /* SleepActivityAttributes.swift in Sources */,
