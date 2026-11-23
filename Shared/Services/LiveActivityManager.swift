@@ -6,6 +6,27 @@ import ActivityKit
 public final class LiveActivityManager: @unchecked Sendable {
     public static let shared = LiveActivityManager()
 
+    private actor SyncCoordinator {
+        private var activeTask: Task<Bool, Never>?
+
+        func run(_ operation: @escaping @Sendable () async -> Bool) async -> Bool {
+            if let previous = activeTask {
+                _ = await previous.value
+            }
+            let task = Task {
+                await operation()
+            }
+            activeTask = task
+            let result = await task.value
+            if activeTask == task {
+                activeTask = nil
+            }
+            return result
+        }
+    }
+
+    private let syncCoordinator = SyncCoordinator()
+
     private init() {}
 
     public var areActivitiesSupported: Bool {
@@ -18,53 +39,88 @@ public final class LiveActivityManager: @unchecked Sendable {
 
     public var hasActiveActivity: Bool {
         #if canImport(ActivityKit) && os(iOS)
-        return Activity<SleepActivityAttributes>.activities.contains { $0.activityState == .active }
+        return Activity<SleepActivityAttributes>.activities.contains {
+            $0.activityState == .active || $0.activityState == .stale
+        }
         #else
         return false
         #endif
     }
 
+    #if canImport(ActivityKit)
+    public static func makeContentState(
+        for state: CurrentSleepState,
+        babyName: String,
+        fallbackDate: Date = Date()
+    ) -> SleepActivityAttributes.ContentState {
+        switch state {
+        case .sleeping(let since, _):
+            return SleepActivityAttributes.ContentState(
+                isSleeping: true,
+                startDate: since,
+                statusTitle: "Durmiendo",
+                babyName: babyName,
+                hasStartDate: true
+            )
+        case .awake(let since, _):
+            return SleepActivityAttributes.ContentState(
+                isSleeping: false,
+                startDate: since,
+                statusTitle: "Despierto",
+                babyName: babyName,
+                hasStartDate: true
+            )
+        case .unknown:
+            return SleepActivityAttributes.ContentState(
+                isSleeping: false,
+                startDate: fallbackDate,
+                statusTitle: "Despierto",
+                babyName: babyName,
+                hasStartDate: false
+            )
+        }
+    }
+    #endif
+
     @discardableResult
     public func syncWithCurrentState() async -> Bool {
+        return await syncCoordinator.run { [self] in
+            await self.performSyncWithCurrentState()
+        }
+    }
+
+    private func performSyncWithCurrentState() async -> Bool {
         #if canImport(ActivityKit) && os(iOS)
         guard areActivitiesSupported else {
             return false
         }
 
         let service = SleepTrackingService.shared
-        guard let state = try? service.getCurrentState() else {
-            return false
-        }
-
-        // Notch / Dynamic Island is ONLY active when sleeping.
-        // If awake or unknown, dismiss all live activities immediately.
-        guard state.isSleeping, let sinceDate = state.sinceDate else {
-            await stopAllActivities()
-            return false
-        }
-
-        let contentState = SleepActivityAttributes.ContentState(
-            isSleeping: true,
-            startDate: sinceDate,
-            statusTitle: "Durmiendo",
-            babyName: BabyProfileManager.shared.displayName
-        )
+        let state = (try? service.getCurrentState()) ?? .unknown
+        let babyName = BabyProfileManager.shared.displayName
+        let contentState = Self.makeContentState(for: state, babyName: babyName)
         let content = ActivityContent(state: contentState, staleDate: nil)
 
-        let activeActivities = Activity<SleepActivityAttributes>.activities.filter { $0.activityState == .active }
+        let allActivities = Activity<SleepActivityAttributes>.activities
+        let updatableActivities = allActivities.filter {
+            $0.activityState == .active || $0.activityState == .stale
+        }
 
-        if let primary = activeActivities.first {
+        if let primary = updatableActivities.first {
             await primary.update(content)
 
-            // Dismiss any duplicate activities
-            if activeActivities.count > 1 {
-                for duplicate in activeActivities.dropFirst() {
-                    await duplicate.end(nil, dismissalPolicy: .immediate)
-                }
+            // Dismiss any duplicate or ended activities so only one widget remains visible
+            for extra in allActivities where extra.id != primary.id {
+                await extra.end(nil, dismissalPolicy: .immediate)
             }
             return true
         } else {
-            let attributes = SleepActivityAttributes(babyName: BabyProfileManager.shared.displayName)
+            // Clear any ended/dismissed remnants before requesting a fresh activity
+            for stale in allActivities {
+                await stale.end(nil, dismissalPolicy: .immediate)
+            }
+
+            let attributes = SleepActivityAttributes(babyName: babyName)
             do {
                 _ = try Activity.request(attributes: attributes, content: content, pushType: nil)
                 return true

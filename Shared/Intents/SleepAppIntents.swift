@@ -37,3 +37,39 @@ public struct RecordWakeIntent: AppIntent {
         }
     }
 }
+
+#if os(iOS)
+/// Background-executable Live Activity intent for recording sleep directly from the Lock Screen
+/// without requiring device unlock.
+public struct LiveActivityRecordSleepIntent: LiveActivityIntent {
+    public static var title: LocalizedStringResource = "Se durmió"
+    public static var description = IntentDescription("Registra que el bebé se durmió desde la pantalla de bloqueo.")
+    public static var authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
+    public static var isDiscoverable: Bool = false
+
+    public init() {}
+
+    public func perform() async throws -> some IntentResult {
+        _ = try? SleepTrackingService.shared.recordEvent(type: .sleep)
+        await LiveActivityManager.shared.syncWithCurrentState()
+        return .result()
+    }
+}
+
+/// Background-executable Live Activity intent for recording wake directly from the Lock Screen
+/// without requiring device unlock.
+public struct LiveActivityRecordWakeIntent: LiveActivityIntent {
+    public static var title: LocalizedStringResource = "Se despertó"
+    public static var description = IntentDescription("Registra que el bebé se despertó desde la pantalla de bloqueo.")
+    public static var authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
+    public static var isDiscoverable: Bool = false
+
+    public init() {}
+
+    public func perform() async throws -> some IntentResult {
+        _ = try? SleepTrackingService.shared.recordEvent(type: .wake)
+        await LiveActivityManager.shared.syncWithCurrentState()
+        return .result()
+    }
+}
+#endif

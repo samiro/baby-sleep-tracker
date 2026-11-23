@@ -107,17 +107,69 @@ final class LiveActivityTests: XCTestCase {
         XCTAssertEqual(wakeContentState.statusTitle, "Despierto")
     }
 
-    func testLiveActivityOnlyActiveWhenSleeping() throws {
-        // When awake, notch is not activated
-        try service.recordEvent(type: .wake)
-        let wakeState = try service.getCurrentState()
-        XCTAssertFalse(wakeState.isSleeping)
+    func testContentStateBackwardCompatibleDecoding() throws {
+        // Simulates an existing serialized ContentState prior to adding hasStartDate
+        let legacyJSON = """
+        {
+            "isSleeping": true,
+            "startDate": 1000,
+            "statusTitle": "Durmiendo",
+            "babyName": "Emanuel"
+        }
+        """.data(using: .utf8)!
 
-        // When sleeping, notch is activated
-        try service.recordEvent(type: .sleep, force: true)
-        let sleepState = try service.getCurrentState()
-        XCTAssertTrue(sleepState.isSleeping)
+        let decoded = try JSONDecoder().decode(SleepActivityAttributes.ContentState.self, from: legacyJSON)
+        XCTAssertTrue(decoded.isSleeping)
+        XCTAssertEqual(decoded.statusTitle, "Durmiendo")
+        XCTAssertEqual(decoded.babyName, "Emanuel")
+        XCTAssertTrue(decoded.hasStartDate)
+        XCTAssertEqual(decoded.actionButtonTitle, "Se despertó")
     }
+
+    func testPersistentLiveActivityContentStateForSleepingAwakeAndUnknown() throws {
+        let sleepTime = Date().addingTimeInterval(-3600)
+        try service.recordEvent(type: .sleep, timestamp: sleepTime)
+
+        let sleepState = try service.getCurrentState()
+        let sleepContentState = LiveActivityManager.makeContentState(for: sleepState, babyName: "Emanuel")
+        XCTAssertTrue(sleepContentState.isSleeping)
+        XCTAssertTrue(sleepContentState.hasStartDate)
+        XCTAssertEqual(sleepContentState.statusTitle, "Durmiendo")
+        XCTAssertEqual(sleepContentState.actionButtonTitle, "Se despertó")
+        XCTAssertEqual(sleepContentState.startDate.timeIntervalSince1970, sleepTime.timeIntervalSince1970, accuracy: 1.0)
+
+        let wakeTime = Date().addingTimeInterval(-1800)
+        try service.recordEvent(type: .wake, timestamp: wakeTime)
+
+        let wakeState = try service.getCurrentState()
+        let wakeContentState = LiveActivityManager.makeContentState(for: wakeState, babyName: "Emanuel")
+        XCTAssertFalse(wakeContentState.isSleeping)
+        XCTAssertTrue(wakeContentState.hasStartDate)
+        XCTAssertEqual(wakeContentState.statusTitle, "Despierto")
+        XCTAssertEqual(wakeContentState.actionButtonTitle, "Se durmió")
+        XCTAssertEqual(wakeContentState.startDate.timeIntervalSince1970, wakeTime.timeIntervalSince1970, accuracy: 1.0)
+
+        let unknownContentState = LiveActivityManager.makeContentState(for: .unknown, babyName: "Emanuel")
+        XCTAssertFalse(unknownContentState.isSleeping)
+        XCTAssertFalse(unknownContentState.hasStartDate)
+        XCTAssertEqual(unknownContentState.statusTitle, "Despierto")
+        XCTAssertEqual(unknownContentState.actionButtonTitle, "Se durmió")
+    }
+
+    func testLockScreenWidgetDeepLinkTargetsTodayView() {
+        XCTAssertEqual(SleepActivityAttributes.lockScreenWidgetURL.scheme, "babysleeptracker")
+        XCTAssertEqual(SleepActivityAttributes.lockScreenWidgetURL.host, "today")
+    }
+
+    #if os(iOS)
+    func testLockScreenLiveActivityIntentsDoNotRequireDeviceUnlock() {
+        XCTAssertEqual(LiveActivityRecordSleepIntent.authenticationPolicy, .alwaysAllowed)
+        XCTAssertFalse(LiveActivityRecordSleepIntent.isDiscoverable)
+
+        XCTAssertEqual(LiveActivityRecordWakeIntent.authenticationPolicy, .alwaysAllowed)
+        XCTAssertFalse(LiveActivityRecordWakeIntent.isDiscoverable)
+    }
+    #endif
 
     func testLiveActivityManagerProperties() {
         let manager = LiveActivityManager.shared
