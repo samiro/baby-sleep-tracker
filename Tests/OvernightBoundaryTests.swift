@@ -37,7 +37,8 @@ final class OvernightBoundaryTests: XCTestCase {
         XCTAssertEqual(metricsFromSleep.cycleStart, metricsFromWake.cycleStart)
         XCTAssertEqual(metricsFromSleep.cycleEnd, metricsFromWake.cycleEnd)
         XCTAssertEqual(metricsFromSleep.nightSleepOnset, sleepTime)
-        XCTAssertEqual(metricsFromSleep.morningWakeTime, wakeTime)
+        // 06:30 falls within the configured 19:00 - 07:00 nighttime window, so it is not a daytime morning wake
+        XCTAssertNil(metricsFromSleep.morningWakeTime)
         XCTAssertEqual(metricsFromSleep.totalNightSleepDuration, 10 * 3600, accuracy: 1.0)
         XCTAssertEqual(metricsFromSleep.sleepIntervals.count, 1)
 

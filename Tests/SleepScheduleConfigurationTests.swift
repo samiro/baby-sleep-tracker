@@ -214,14 +214,14 @@ final class SleepScheduleConfigurationTests: XCTestCase {
         let c1NapStart = calendar.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 13, minute: 0))!
         let c1NapEnd = calendar.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 14, minute: 30))!
         let c2BoundarySleep = calendar.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 19, minute: 0))!
-        let c2MorningWake = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 6, minute: 30))!
+        let c2NightWake = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 6, minute: 30))!
 
         try service.recordEvent(type: .sleep, timestamp: c1NightStart, force: true)
         try service.recordEvent(type: .wake, timestamp: c1MorningWake, force: true)
         try service.recordEvent(type: .sleep, timestamp: c1NapStart, force: true)
         try service.recordEvent(type: .wake, timestamp: c1NapEnd, force: true)
         try service.recordEvent(type: .sleep, timestamp: c2BoundarySleep, force: true)
-        try service.recordEvent(type: .wake, timestamp: c2MorningWake, force: true)
+        try service.recordEvent(type: .wake, timestamp: c2NightWake, force: true)
 
         let cycle1 = config.cycleRange(containing: c1NapStart, calendar: calendar)
         let cycle1Events = try service.fetchEvents(in: cycle1)
@@ -243,7 +243,8 @@ final class SleepScheduleConfigurationTests: XCTestCase {
 
         let cycle2Metrics = try service.calculateCycleMetrics(for: cycle2, calendar: calendar, configuration: config)
         XCTAssertEqual(cycle2Metrics.nightSleepOnset, c2BoundarySleep)
-        XCTAssertEqual(cycle2Metrics.morningWakeTime, c2MorningWake)
+        // 06:30 falls within the configured 19:00 - 07:00 nighttime window, not daytime
+        XCTAssertNil(cycle2Metrics.morningWakeTime)
         XCTAssertEqual(cycle2Metrics.totalNightSleepDuration, 11.5 * 3600, accuracy: 1.0)
     }
 
@@ -424,6 +425,150 @@ final class SleepScheduleConfigurationTests: XCTestCase {
         let wakeTime = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 22, minute: 0))!
         try service.recordEvent(type: .wake, timestamp: wakeTime, force: true)
         XCTAssertNil(try service.activeSleepInterval(in: currentCycle, configuration: config, now: now, calendar: calendar))
+    }
+
+    func testMorningWakeExcludesNighttimeWakesAndUsesConfiguredDayWindow() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Bogota")!
+
+        // Day: 07:00 - 19:00, Night: 19:00 - 07:00
+        let standardConfig = SleepScheduleConfiguration(
+            nightStartHour: 19,
+            nightStartMinute: 0,
+            dayStartHour: 7,
+            dayStartMinute: 0
+        )
+        configManager.save(standardConfig)
+
+        // Issue #30 example: wake at 06:00 falls inside Night (19:00 - 07:00) and must NOT be morningWakeTime
+        let nightSleepStart = calendar.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 20, minute: 0))!
+        let nightWake0600 = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 6, minute: 0))!
+        let backToSleep0615 = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 6, minute: 15))!
+        let nightWake0659 = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 6, minute: 59))!
+
+        try service.recordEvent(type: .sleep, timestamp: nightSleepStart, force: true)
+        try service.recordEvent(type: .wake, timestamp: nightWake0600, force: true)
+
+        let cycle = standardConfig.cycleRange(containing: nightSleepStart, calendar: calendar)
+        var metrics = try service.calculateCycleMetrics(for: cycle, calendar: calendar, configuration: standardConfig)
+        XCTAssertEqual(metrics.nightSleepOnset, nightSleepStart)
+        XCTAssertNil(metrics.morningWakeTime)
+        XCTAssertEqual(metrics.totalNightSleepDuration, 10 * 3600, accuracy: 1.0)
+        XCTAssertEqual(metrics.totalDaytimeSleepDuration, 0, accuracy: 1.0)
+        XCTAssertEqual(metrics.completedNapsCount, 0)
+
+        // Even 06:59 is still inside Night (19:00 - 07:00), so morningWakeTime stays nil
+        try service.recordEvent(type: .sleep, timestamp: backToSleep0615, force: true)
+        try service.recordEvent(type: .wake, timestamp: nightWake0659, force: true)
+        metrics = try service.calculateCycleMetrics(for: cycle, calendar: calendar, configuration: standardConfig)
+        XCTAssertNil(metrics.morningWakeTime)
+        XCTAssertEqual(metrics.totalNightSleepDuration, (10 * 3600) + (44 * 60), accuracy: 1.0)
+        XCTAssertEqual(metrics.completedNapsCount, 0)
+
+        // First wake inside Day (at exact 07:00 boundary or later, even > 4h after dayStart) becomes morningWakeTime
+        let morningNapStart = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 11, minute: 0))!
+        let lateDayWake1230 = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 12, minute: 30))!
+        try service.recordEvent(type: .sleep, timestamp: morningNapStart, force: true)
+        try service.recordEvent(type: .wake, timestamp: lateDayWake1230, force: true)
+
+        metrics = try service.calculateCycleMetrics(for: cycle, calendar: calendar, configuration: standardConfig)
+        XCTAssertEqual(metrics.morningWakeTime, lateDayWake1230)
+        XCTAssertEqual(metrics.completedNapsCount, 1)
+        XCTAssertEqual(metrics.totalDaytimeSleepDuration, 1.5 * 3600, accuracy: 1.0)
+
+        // Adding a wake at exact 07:00 makes 07:00 the first wake within the configured Day window
+        let backToSleep0659 = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 6, minute: 59, second: 30))!
+        let exactDayStartWake = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 7, minute: 0, second: 0))!
+        try service.recordEvent(type: .sleep, timestamp: backToSleep0659, force: true)
+        try service.recordEvent(type: .wake, timestamp: exactDayStartWake, force: true)
+
+        metrics = try service.calculateCycleMetrics(for: cycle, calendar: calendar, configuration: standardConfig)
+        XCTAssertEqual(metrics.morningWakeTime, exactDayStartWake)
+    }
+
+    func testSummaryMetricsUpdateDynamicallyWhenDayNightScheduleChanges() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Bogota")!
+
+        // Start with standard Day 07:00 - 19:00 / Night 19:00 - 07:00
+        let standardConfig = SleepScheduleConfiguration(
+            nightStartHour: 19,
+            nightStartMinute: 0,
+            dayStartHour: 7,
+            dayStartMinute: 0
+        )
+        configManager.save(standardConfig)
+
+        // Events:
+        // - Sleep 20:00 -> Wake 06:00 (10h)
+        // - Sleep 06:30 -> Wake 08:30 (2h)
+        // - Sleep 13:00 -> Wake 14:30 (1.5h)
+        let sleep2000 = calendar.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 20, minute: 0))!
+        let wake0600 = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 6, minute: 0))!
+        let sleep0630 = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 6, minute: 30))!
+        let wake0830 = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 8, minute: 30))!
+        let sleep1300 = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 13, minute: 0))!
+        let wake1430 = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 14, minute: 30))!
+
+        try service.recordEvent(type: .sleep, timestamp: sleep2000, force: true)
+        try service.recordEvent(type: .wake, timestamp: wake0600, force: true)
+        try service.recordEvent(type: .sleep, timestamp: sleep0630, force: true)
+        try service.recordEvent(type: .wake, timestamp: wake0830, force: true)
+        try service.recordEvent(type: .sleep, timestamp: sleep1300, force: true)
+        try service.recordEvent(type: .wake, timestamp: wake1430, force: true)
+
+        // 1) Under 19:00 - 07:00:
+        //    - nightSleepOnset = 20:00
+        //    - morningWakeTime = 08:30 (06:00 is inside Night)
+        //    - 06:30 -> 08:30 started in Night -> night sleep (10h + 2h = 12h)
+        //    - 13:00 -> 14:30 started in Day -> 1 nap (1.5h)
+        let standardMetrics = try service.calculateDayMetrics(for: sleep1300, calendar: calendar)
+        XCTAssertEqual(standardMetrics.nightSleepOnset, sleep2000)
+        XCTAssertEqual(standardMetrics.morningWakeTime, wake0830)
+        XCTAssertEqual(standardMetrics.totalNightSleepDuration, 12 * 3600, accuracy: 1.0)
+        XCTAssertEqual(standardMetrics.totalDaytimeSleepDuration, 1.5 * 3600, accuracy: 1.0)
+        XCTAssertEqual(standardMetrics.totalSleepDuration, 13.5 * 3600, accuracy: 1.0)
+        XCTAssertEqual(standardMetrics.completedNapsCount, 1)
+
+        // 2) Change schedule to Day 06:00 - 18:00 / Night 18:00 - 06:00:
+        //    - nightSleepOnset = 20:00
+        //    - morningWakeTime = 06:00 (06:00 is now Day start)
+        //    - 06:30 -> 08:30 started in Day -> now a nap! (night = 10h, day = 3.5h, 2 naps)
+        let earlyConfig = SleepScheduleConfiguration(
+            nightStartHour: 18,
+            nightStartMinute: 0,
+            dayStartHour: 6,
+            dayStartMinute: 0
+        )
+        try service.applyScheduleConfiguration(earlyConfig, calendar: calendar)
+
+        let earlyMetrics = try service.calculateDayMetrics(for: sleep1300, calendar: calendar)
+        XCTAssertEqual(earlyMetrics.nightSleepOnset, sleep2000)
+        XCTAssertEqual(earlyMetrics.morningWakeTime, wake0600)
+        XCTAssertEqual(earlyMetrics.totalNightSleepDuration, 10 * 3600, accuracy: 1.0)
+        XCTAssertEqual(earlyMetrics.totalDaytimeSleepDuration, 3.5 * 3600, accuracy: 1.0)
+        XCTAssertEqual(earlyMetrics.totalSleepDuration, 13.5 * 3600, accuracy: 1.0)
+        XCTAssertEqual(earlyMetrics.completedNapsCount, 2)
+
+        // 3) Change schedule to Day 09:00 - 21:00 / Night 21:00 - 09:00:
+        //    - Cycle containing sleep1300 (Nov 20 13:00) is [Nov 19 21:00, Nov 20 21:00)
+        //    - 20:00 -> 06:00 started at 20:00 (Day of previous cycle, clipped 21:00..06:00 = 9h in this cycle as nap)
+        //    - nightSleepOnset = 06:30 (first sleep inside Night 21:00 - 09:00; 20:00 is outside this cycle and daytime!)
+        //    - morningWakeTime = 14:30 (06:00 and 08:30 are both inside Night 21:00 - 09:00!)
+        let lateConfig = SleepScheduleConfiguration(
+            nightStartHour: 21,
+            nightStartMinute: 0,
+            dayStartHour: 9,
+            dayStartMinute: 0
+        )
+        try service.applyScheduleConfiguration(lateConfig, calendar: calendar)
+
+        let lateMetrics = try service.calculateDayMetrics(for: sleep1300, calendar: calendar)
+        XCTAssertEqual(lateMetrics.nightSleepOnset, sleep0630)
+        XCTAssertEqual(lateMetrics.morningWakeTime, wake1430)
+        XCTAssertEqual(lateMetrics.totalNightSleepDuration, 2 * 3600, accuracy: 1.0)
+        XCTAssertEqual(lateMetrics.totalDaytimeSleepDuration, 10.5 * 3600, accuracy: 1.0)
+        XCTAssertEqual(lateMetrics.completedNapsCount, 2)
     }
 
     // MARK: - Helpers
