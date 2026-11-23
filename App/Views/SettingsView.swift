@@ -79,29 +79,37 @@ public struct SettingsView: View {
 
                         Spacer()
 
-                        Button {
-                            showEditBabyNameModal = true
-                        } label: {
-                            Image(systemName: "pencil")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.accentColor)
-                                .frame(minWidth: 32, minHeight: 32)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("Editar")
+                        HStack(spacing: 6) {
+                            Button {
+                                showEditBabyNameModal = true
+                            } label: {
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 28, height: 28)
+                                    .background(Color(.tertiarySystemFill))
+                                    .clipShape(Circle())
+                                    .frame(minWidth: 32, minHeight: 32)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("Editar")
 
-                        Button {
-                            showResetBabyNameConfirmation = true
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.red)
-                                .frame(minWidth: 32, minHeight: 32)
-                                .contentShape(Rectangle())
+                            Button {
+                                showResetBabyNameConfirmation = true
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 28, height: 28)
+                                    .background(Color(.tertiarySystemFill))
+                                    .clipShape(Circle())
+                                    .frame(minWidth: 32, minHeight: 32)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("Eliminar")
                         }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("Eliminar")
                     }
                     .padding(.vertical, 4)
                 } header: {
@@ -127,17 +135,7 @@ public struct SettingsView: View {
                         .font(.caption)
                 }
 
-                // Section 2: Data Actions & Maintenance
-                Section(header: Label("Mantenimiento de datos", systemImage: "wrench.and.screwdriver")) {
-                    Button(role: .destructive) {
-                        showClearDataConfirmation = true
-                    } label: {
-                        Label("Reiniciar datos (Borrar todo y empezar de 0)", systemImage: "trash")
-                            .foregroundColor(.red)
-                    }
-                }
-
-                // Section 3: Pediatric Sleep Information
+                // Section 2: Pediatric Sleep Information
                 Section(header: Label("Guía pediátrica", systemImage: "info.circle")) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("¿Por qué diferenciar siestas y noche?")
@@ -149,6 +147,16 @@ public struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 4)
+                }
+
+                // Section 3: Data Actions & Maintenance
+                Section(header: Label("Mantenimiento de datos", systemImage: "wrench.and.screwdriver")) {
+                    Button(role: .destructive) {
+                        showClearDataConfirmation = true
+                    } label: {
+                        Label("Reiniciar datos (Borrar todo y empezar de 0)", systemImage: "trash")
+                            .foregroundColor(.red)
+                    }
                 }
 
                 // Section 4: Acerca de
@@ -336,9 +344,9 @@ public struct SettingsView: View {
             .padding(.top, 4)
             .padding(.bottom, 2)
 
-            // Explicit Save / Cancel Actions
-            HStack(spacing: 10) {
-                if hasUnsavedScheduleChanges {
+            // Explicit Save / Cancel Actions (visible only when schedule changes are pending)
+            if hasUnsavedScheduleChanges {
+                HStack(spacing: 10) {
                     Button {
                         discardUnsavedChanges()
                     } label: {
@@ -355,27 +363,28 @@ public struct SettingsView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                     .buttonStyle(.plain)
-                }
 
-                Button {
-                    showSaveScheduleConfirmation = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "checkmark.circle.fill")
-                        Text(hasUnsavedScheduleChanges ? "Guardar cambios" : "Guardar cambios del ciclo")
-                            .fontWeight(.semibold)
+                    Button {
+                        showSaveScheduleConfirmation = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark.circle.fill")
+                            Text("Guardar cambios")
+                                .fontWeight(.semibold)
+                        }
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .foregroundColor(.white)
+                        .background(Color.accentColor)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
-                    .font(.subheadline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .foregroundColor(hasUnsavedScheduleChanges ? .white : .secondary)
-                    .background(hasUnsavedScheduleChanges ? Color.accentColor : Color(.tertiarySystemFill))
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                .disabled(!hasUnsavedScheduleChanges)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+        .animation(.easeInOut(duration: 0.2), value: hasUnsavedScheduleChanges)
         .padding(.vertical, 6)
     }
 
