@@ -20,6 +20,12 @@ struct BabySleepTrackerApp: App {
                     }
                     .tag("history")
 
+                MetricsAnalyticsView()
+                    .tabItem {
+                        Label("Métricas", systemImage: "chart.bar.xaxis")
+                    }
+                    .tag("metrics")
+
                 SettingsView()
                     .tabItem {
                         Label("Ajustes", systemImage: "gearshape.fill")
@@ -48,6 +54,8 @@ struct BabySleepTrackerApp: App {
                 selectedTab = "dashboard"
             } else if url.host == "history" {
                 selectedTab = "history"
+            } else if url.host == "metrics" || url.host == "analytics" {
+                selectedTab = "metrics"
             } else if url.host == "settings" {
                 selectedTab = "settings"
             }
