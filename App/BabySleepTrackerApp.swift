@@ -44,7 +44,9 @@ struct BabySleepTrackerApp: App {
 
     private func handleDeepLink(_ url: URL) {
         if url.scheme == "emanuelsleep" || url.scheme == "babysleeptracker" {
-            if url.host == "history" {
+            if url.host == "today" || url.host == "dashboard" || url.host == nil || url.host?.isEmpty == true {
+                selectedTab = "dashboard"
+            } else if url.host == "history" {
                 selectedTab = "history"
             } else if url.host == "settings" {
                 selectedTab = "settings"
