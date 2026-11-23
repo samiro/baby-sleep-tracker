@@ -398,4 +398,49 @@ final class SleepAnalyticsTests: XCTestCase {
         XCTAssertEqual(report.daytimeWakeWindowsCount, 1)
         XCTAssertEqual(report.averageDaytimeWakeWindow ?? 0, 3 * 3600, accuracy: 1.0)
     }
+
+    // MARK: - 6. Night Record History Navigation Offset
+
+    func testCycleOffsetMapsNightRecordDateToExactCycleIncludingPostMidnightStart() throws {
+        let config = SleepScheduleConfiguration(
+            nightStartHour: 19,
+            nightStartMinute: 30,
+            dayStartHour: 7,
+            dayStartMinute: 0
+        )
+        // Reference: Nov 22 at 15:00 -> current cycle is Nov 21 19:30 – Nov 22 19:30
+        let ref = makeDate(day: 22, hour: 15, minute: 0)
+
+        var events: [SleepEvent] = []
+        // Cycle Nov 18 (offset -3): 4h night block
+        events += makeBlock(startDay: 18, startHour: 20, endDay: 19, endHour: 0)
+        // Cycle Nov 19 (offset -2): longest night stretch starting AFTER midnight on Nov 20 00:15 -> 06:45 (6.5h)
+        events += makeBlock(startDay: 20, startHour: 0, startMinute: 15, endDay: 20, endHour: 6, endMinute: 45)
+        // Cycle Nov 21 (offset 0): 5h night block
+        events += makeBlock(startDay: 21, startHour: 21, endDay: 22, endHour: 2)
+
+        let report = analyticsService.computeReport(
+            from: events,
+            preset: .last7Days,
+            configuration: config,
+            referenceDate: ref,
+            calendar: calendar
+        )
+
+        let record = try XCTUnwrap(report.longestNightStretch)
+        XCTAssertEqual(record.startTime, makeDate(day: 20, hour: 0, minute: 15))
+        XCTAssertEqual(record.cycleStart, makeDate(day: 19, hour: 19, minute: 30))
+
+        // Offset computed from record.startTime must resolve to exact cycle Nov 19 19:30 – Nov 20 19:30 (offset -2)
+        let offset = config.cycleOffset(for: record.startTime, relativeTo: ref, calendar: calendar)
+        XCTAssertEqual(offset, -2)
+        XCTAssertEqual(
+            config.cycleRange(offset: offset, from: ref, calendar: calendar).start,
+            record.cycleStart
+        )
+
+        // Current cycle & future timestamps clamp to 0
+        XCTAssertEqual(config.cycleOffset(for: makeDate(day: 21, hour: 21), relativeTo: ref, calendar: calendar), 0)
+        XCTAssertEqual(config.cycleOffset(for: makeDate(day: 25, hour: 21), relativeTo: ref, calendar: calendar), 0)
+    }
 }

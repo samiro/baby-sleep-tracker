@@ -4,6 +4,7 @@ import SwiftUI
 struct BabySleepTrackerApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: String = "dashboard"
+    @State private var historyTargetDate: Date? = nil
 
     var body: some Scene {
         WindowGroup {
@@ -14,13 +15,16 @@ struct BabySleepTrackerApp: App {
                     }
                     .tag("dashboard")
 
-                TimelineHistoryView()
+                TimelineHistoryView(targetDate: $historyTargetDate)
                     .tabItem {
                         Label("Historial", systemImage: "clock.arrow.circlepath")
                     }
                     .tag("history")
 
-                MetricsAnalyticsView()
+                MetricsAnalyticsView(onSelectHistoryDate: { date in
+                    historyTargetDate = date
+                    selectedTab = "history"
+                })
                     .tabItem {
                         Label("Métricas", systemImage: "chart.bar.xaxis")
                     }
