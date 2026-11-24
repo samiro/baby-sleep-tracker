@@ -1218,12 +1218,12 @@ private struct WakeWindowSummaryCard: View {
 
             VStack(spacing: 8) {
                 WakePeriodGroupRow(
-                    periodTitle: "Despertares diurnos",
+                    periodTitle: "Ventanas de vigilia diurna",
                     icon: "sun.max.fill",
                     accentColor: .orange,
-                    countLabel: "Cantidad promedio día",
+                    countLabel: "Periodos activos promedio",
                     countValue: SleepAnalyticsReport.formatFrequency(averageDaytimeWakingsPerCycle),
-                    durationLabel: "Duración promedio",
+                    durationLabel: "Duración media de vigilia",
                     durationValue: averageDaytimeWakeWindow.map(DayMetrics.formatDuration) ?? "--"
                 )
 
@@ -1268,13 +1268,14 @@ private struct WakePeriodGroupRow: View {
                 Spacer()
             }
 
-            WeightedHStack(weights: [0.55, 0.45], spacing: 0) {
+            WeightedHStack(weights: [0.50, 0.50], spacing: 0) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(countLabel)
                         .font(.caption2)
                         .fontWeight(.medium)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.8)
 
                     Text(countValue)
                         .font(.system(.subheadline, design: .rounded).weight(.bold))
@@ -1297,6 +1298,7 @@ private struct WakePeriodGroupRow: View {
                         .fontWeight(.medium)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.8)
 
                     Text(durationValue)
                         .font(.system(.subheadline, design: .rounded).weight(.bold))

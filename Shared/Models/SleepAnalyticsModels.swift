@@ -154,7 +154,10 @@ public struct AnalyticsCycleSummary: Identifiable, Equatable, Sendable {
     public let daytimeSleepDuration: TimeInterval
     public let napsCount: Int
     public let nightSleepBlocksCount: Int
+    /// Number of nocturnal sleep interruptions (night wakings) between consecutive night stretches in this cycle.
     public let nightWakingsCount: Int
+    /// Number of active daytime wake windows (awake periods between naps / before bedtime) in this cycle.
+    /// Clinically distinct from `nightWakingsCount`, which represents nocturnal sleep fragmentation.
     public let daytimeWakingsCount: Int
     public let nightSleepOnset: Date?
     public let morningWakeTime: Date?
@@ -267,14 +270,21 @@ public struct SleepAnalyticsReport: Equatable, Sendable {
     // 2. Schedule Trend & Consistency
     public let averageNightSleepOnset: TimeOfDayAverage?
     public let averageMorningWakeTime: TimeOfDayAverage?
+    /// Average duration of active daytime wake windows (awake periods between naps and before bedtime).
+    /// Conceptually represents daytime `awakePeriodDuration`, distinct from nocturnal sleep interruptions (`averageNightWakingDuration`).
     public let averageDaytimeWakeWindow: TimeInterval?
+    /// Total number of daytime active wake windows evaluated across the selected horizon.
     public let daytimeWakeWindowsCount: Int
+    /// Average number of active daytime wake windows per active 24-hour cycle (not sleep interruptions).
     public let averageDaytimeWakingsPerCycle: Double?
+    /// Average duration of nocturnal sleep interruptions (`nightWakingDuration`) between consecutive night sleep stretches.
     public let averageNightWakingDuration: TimeInterval?
+    /// Total number of nocturnal sleep interruptions (night wakings) evaluated across the selected horizon.
     public let nightWakeWindowsCount: Int
 
     // 3. Frequency Averages
     public let averageNapsPerDay: Double?
+    /// Average number of nocturnal sleep interruptions (night wakings) per active 24-hour cycle.
     public let averageNightWakingsPerCycle: Double?
 
     public init(
