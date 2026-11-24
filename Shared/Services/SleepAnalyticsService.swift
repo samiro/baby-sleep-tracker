@@ -188,12 +188,14 @@ public final class SleepAnalyticsService: @unchecked Sendable {
         var longestNapRecord: SleepDurationRecord? = nil
         var nightOnsetDates: [Date] = []
         var morningWakeDates: [Date] = []
-        var daytimeWakeWindowDurations: [TimeInterval] = []
+        // Active daytime awake periods (wake windows between naps / before bedtime) vs. nocturnal sleep interruptions (night wakings).
+        var daytimeAwakePeriodDurations: [TimeInterval] = []
         var nightWakingDurations: [TimeInterval] = []
-        var daytimeWakingsByCycle = Array(repeating: 0, count: cycles.count)
+        var daytimeWakeWindowsByCycle = Array(repeating: 0, count: cycles.count)
 
-        // Compute daytime wake windows between consecutive completed sleep blocks.
-        // A wake window belongs to a cycle's daytime if:
+        // Compute daytime active wake windows (awakePeriodDuration) between consecutive completed sleep blocks.
+        // Clinically these are normal daytime awake periods, distinct from nocturnal sleep interruptions (`nightWakingDurations`).
+        // A daytime wake window belongs to a cycle's daytime if:
         //  (a) It starts during the cycle's daytime window [cycle.dayStart, cycle.end) and ends before the next cycle's dayStart
         //      (covering wake windows between naps and the final wake window before bedtime), OR
         //  (b) It starts during the cycle's night window [cycle.start, cycle.dayStart) and ends during the cycle's daytime window
@@ -229,8 +231,8 @@ public final class SleepAnalyticsService: @unchecked Sendable {
                         && configuration.isDayTime(for: wakeEnd, calendar: calendar)
                     return startsInNightAndEndsInDaytime
                 }) {
-                    daytimeWakeWindowDurations.append(duration)
-                    daytimeWakingsByCycle[matchedCycleIndex] += 1
+                    daytimeAwakePeriodDurations.append(duration)
+                    daytimeWakeWindowsByCycle[matchedCycleIndex] += 1
                 }
             }
         }
@@ -268,7 +270,7 @@ public final class SleepAnalyticsService: @unchecked Sendable {
             let cycleNaps = startingSleeps.filter { $0.classification == .nap }
             let cycleNightBlocks = startingSleeps.filter { $0.classification == .nightSleep }
 
-            // Night wakings: interruptions between consecutive completed night stretches within the cycle's night window.
+            // Night wakings (nightWakingDuration): nocturnal sleep interruptions between consecutive night stretches within the cycle's night window.
             var cycleNightWakingDurations: [TimeInterval] = []
             if cycleNightBlocks.count >= 2 {
                 for index in 0..<(cycleNightBlocks.count - 1) {
@@ -365,7 +367,7 @@ public final class SleepAnalyticsService: @unchecked Sendable {
                     napsCount: cycleNaps.count,
                     nightSleepBlocksCount: cycleNightBlocks.count,
                     nightWakingsCount: nightWakings,
-                    daytimeWakingsCount: daytimeWakingsByCycle[cycleIndex],
+                    daytimeWakingsCount: daytimeWakeWindowsByCycle[cycleIndex],
                     nightSleepOnset: nightOnset,
                     morningWakeTime: morningWake,
                     hasCompletedSleepData: hasData
@@ -382,7 +384,7 @@ public final class SleepAnalyticsService: @unchecked Sendable {
         let averageNightSleep: TimeInterval?
         let averageDaytimeSleep: TimeInterval?
         let averageNapsPerDay: Double?
-        let averageDaytimeWakings: Double?
+        let averageDaytimeWakeWindowsPerCycle: Double?
         let averageNightWakings: Double?
 
         if activeCount > 0 {
@@ -391,14 +393,14 @@ public final class SleepAnalyticsService: @unchecked Sendable {
             averageNightSleep = activeCycles.reduce(0) { $0 + $1.nightSleepDuration } / denominator
             averageDaytimeSleep = activeCycles.reduce(0) { $0 + $1.daytimeSleepDuration } / denominator
             averageNapsPerDay = Double(activeCycles.reduce(0) { $0 + $1.napsCount }) / denominator
-            averageDaytimeWakings = Double(activeCycles.reduce(0) { $0 + $1.daytimeWakingsCount }) / denominator
+            averageDaytimeWakeWindowsPerCycle = Double(activeCycles.reduce(0) { $0 + $1.daytimeWakingsCount }) / denominator
             averageNightWakings = Double(activeCycles.reduce(0) { $0 + $1.nightWakingsCount }) / denominator
         } else {
             averageTotalSleep = nil
             averageNightSleep = nil
             averageDaytimeSleep = nil
             averageNapsPerDay = nil
-            averageDaytimeWakings = nil
+            averageDaytimeWakeWindowsPerCycle = nil
             averageNightWakings = nil
         }
 
@@ -406,9 +408,10 @@ public final class SleepAnalyticsService: @unchecked Sendable {
             ? nil
             : allRangeNaps.reduce(0) { $0 + $1.duration } / Double(allRangeNaps.count)
 
-        let averageWakeWindow: TimeInterval? = daytimeWakeWindowDurations.isEmpty
+        // Daytime active wake window average duration (awakePeriodDuration) vs. nocturnal sleep interruption average duration (nightWakingDuration).
+        let averageDaytimeAwakePeriodDuration: TimeInterval? = daytimeAwakePeriodDurations.isEmpty
             ? nil
-            : daytimeWakeWindowDurations.reduce(0, +) / Double(daytimeWakeWindowDurations.count)
+            : daytimeAwakePeriodDurations.reduce(0, +) / Double(daytimeAwakePeriodDurations.count)
 
         let averageNightWakingDuration: TimeInterval? = nightWakingDurations.isEmpty
             ? nil
@@ -445,9 +448,9 @@ public final class SleepAnalyticsService: @unchecked Sendable {
             longestNap: longestNapRecord,
             averageNightSleepOnset: averageNightOnset,
             averageMorningWakeTime: averageMorningWake,
-            averageDaytimeWakeWindow: averageWakeWindow,
-            daytimeWakeWindowsCount: daytimeWakeWindowDurations.count,
-            averageDaytimeWakingsPerCycle: averageDaytimeWakings,
+            averageDaytimeWakeWindow: averageDaytimeAwakePeriodDuration,
+            daytimeWakeWindowsCount: daytimeAwakePeriodDurations.count,
+            averageDaytimeWakingsPerCycle: averageDaytimeWakeWindowsPerCycle,
             averageNightWakingDuration: averageNightWakingDuration,
             nightWakeWindowsCount: nightWakingDurations.count,
             averageNapsPerDay: averageNapsPerDay,
